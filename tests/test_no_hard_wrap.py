@@ -23,6 +23,7 @@ def edit_call(file_path, old_string, new_string):
 @pytest.mark.parametrize("text", [
     pytest.param("This paragraph runs on\nto a second line.\n", id="paragraph_runs_on"),
     pytest.param("- This list item runs on\n  to a second line.\n", id="list_item_runs_on"),
+    pytest.param("---\r\nname: rules\r\n---\r\n\r\nThis paragraph runs on\r\nto a second line.\r\n", id="paragraph_runs_on_after_front_matter_with_crlf"),
 ])
 def test_hard_wraps(text):
     assert hard_wraps(text)
@@ -32,12 +33,16 @@ def test_hard_wraps(text):
     pytest.param("One paragraph on one line.\n\nAnother paragraph on one line.\n", id="paragraphs_separated_by_blank_line"),
     pytest.param("- one item\n- another item\n", id="list_items"),
     pytest.param("1. First step.\n2. Second step.\n", id="numbered_list_items"),
+    pytest.param("1) First step.\n2) Second step.\n", id="parenthesis_numbered_list_items"),
     pytest.param("* one item\n* another item\n", id="asterisk_list_items"),
+    pytest.param("+ one item\n+ another item\n", id="plus_list_items"),
     pytest.param("## Install\nRun the installer.\n", id="paragraph_right_under_heading"),
     pytest.param("Run the installer.\n## Usage\n", id="heading_right_under_paragraph"),
     pytest.param("| Rule | Script |\n|---|---|\n| One command | `one_command.py` |\n", id="table_rows"),
     pytest.param("Run:\n\n```sh\nuv sync\nuv run pytest\n```\n", id="fenced_code"),
+    pytest.param("Run:\n\n~~~sh\nuv sync\nuv run pytest\n~~~\n", id="tilde_fenced_code"),
     pytest.param("---\nname: rules\ndescription: Hooks that enforce rules.\n---\n\nThe body.\n", id="front_matter"),
+    pytest.param("---\r\nname: rules\r\ndescription: Hooks that enforce rules.\r\n---\r\n\r\nThe body.\r\n", id="front_matter_with_crlf"),
     pytest.param('<p align="center">\n  <img src="logo.png" alt="Logo">\n</p>\n', id="html_block"),
     pytest.param("<!-- markdownlint-disable -->\nText right under a comment.\n", id="paragraph_right_under_html_comment"),
     pytest.param("> [!NOTE]\n> The hooks run with the python3 on the PATH.\n", id="github_alert"),
@@ -49,6 +54,10 @@ def test_no_hard_wraps(text):
 
 def test_main_blocks_write_of_wrapped_markdown(tmp_path):
     assert main(write_call(tmp_path / "README.md", WRAPPED), io.StringIO()) == 2
+
+
+def test_main_blocks_write_of_wrapped_markdown_with_long_extension(tmp_path):
+    assert main(write_call(tmp_path / "README.markdown", WRAPPED), io.StringIO()) == 2
 
 
 def test_main_block_gives_a_reason(tmp_path):
@@ -63,6 +72,11 @@ def test_main_allows_write_of_unwrapped_markdown(tmp_path):
 
 def test_main_allows_write_of_file_that_is_not_markdown(tmp_path):
     assert main(write_call(tmp_path / "hook.py", "import json\nimport sys\n"), io.StringIO()) == 0
+
+
+def test_main_allows_write_of_mdx_with_consecutive_imports(tmp_path):
+    page = 'import Chart from "./chart"\nimport Tabs from "./tabs"\n\n# Sales\n\n<Tabs>\n  <Chart data={sales} />\n</Tabs>\n'
+    assert main(write_call(tmp_path / "sales.mdx", page), io.StringIO()) == 0
 
 
 def test_main_blocks_edit_that_wraps_a_paragraph(tmp_path):

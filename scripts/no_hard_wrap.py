@@ -5,9 +5,9 @@ import re
 import sys
 from pathlib import Path
 
-LIST_ITEM = r"\s*(?:[-*]|\d+\.) "
+LIST_ITEM = r"\s*(?:[-*+]|\d+[.)]) "
 OTHER_BLOCK = r"\s*(?:#{1,6} |[|<>]|\[[^\]]+\]:)"
-FENCE = r"\s*```"
+FENCE = r"\s*(?:```|~~~)"
 
 
 def hard_wraps(text):
@@ -16,10 +16,10 @@ def hard_wraps(text):
     offset = -1  # of the line break before the current line
     in_fence = False
     continuable = False  # whether the previous line is text that the current line could continue
-    front_matter = text.startswith("---\n")
+    front_matter = text.startswith(("---\n", "---\r\n"))
     for number, line in enumerate(text.split("\n")):
         if front_matter:
-            front_matter = number == 0 or line != "---"
+            front_matter = number == 0 or line.rstrip("\r") != "---"
             continuable = False
         elif re.match(FENCE, line):
             in_fence = not in_fence
@@ -40,7 +40,7 @@ def main(stdin, stderr):
     A call that hard-wraps Markdown it writes gets a reason on stderr and 2, which blocks it; anything else gets 0.
     """
     tool_input = json.load(stdin)["tool_input"]
-    if not tool_input["file_path"].endswith(".md"):
+    if not tool_input["file_path"].endswith((".md", ".markdown")):
         return 0
     if "content" in tool_input:
         text, start, end = tool_input["content"], 0, len(tool_input["content"])
