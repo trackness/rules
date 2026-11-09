@@ -15,8 +15,11 @@ def conventional(message):
     return bool(re.match(HEADER, header)) and not rest.split("\n")[0].strip()
 
 
-def register(env_file):
+def register(env_file, stderr):
     """Make git run this script as the commit-msg hook in the Bash commands of the Claude Code session that owns env_file."""
+    if not env_file:
+        print("The Conventional Commits check is not active: Claude Code gave this hook no CLAUDE_ENV_FILE to register it in.", file=stderr)
+        return
     command = shlex.quote(str(Path(__file__).resolve()))  # git runs the command through a shell
     # shortcut: replaces any GIT_CONFIG_COUNT already set in the session; offset the keys if something else sets it
     with open(env_file, "a") as session_env:
@@ -43,4 +46,4 @@ def main(message_file, stderr):
 
 if __name__ == "__main__":
     # git runs this script with the message file; Claude Code's SessionStart runs it with no arguments
-    sys.exit(main(sys.argv[1], sys.stderr) if len(sys.argv) > 1 else register(os.environ["CLAUDE_ENV_FILE"]))
+    sys.exit(main(sys.argv[1], sys.stderr) if len(sys.argv) > 1 else register(os.environ.get("CLAUDE_ENV_FILE"), sys.stderr))

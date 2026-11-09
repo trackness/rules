@@ -2,11 +2,13 @@
 import io
 import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
 from scripts.commit_message import conventional, main, register
 
+SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "commit_message.py"
 TEST_IDENTITY = {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com"}
 
 
@@ -14,7 +16,7 @@ def commit_in_session(tmp_path, message):
     """Register the hook in a session env file, then commit in a new repo as Claude's Bash tool would, with that file sourced."""
     env_file, repo = tmp_path / "session.env", tmp_path / "repo"
     env_file.touch()  # Claude Code hands the hook an existing file to append to
-    register(str(env_file))
+    register(str(env_file), io.StringIO())
     subprocess.run(["git", "init", "-q", str(repo)], check=True)
     return subprocess.run(
         ["bash", "-c", 'source "$1" && git -C "$2" -c commit.gpgsign=false commit --allow-empty -q -m "$3"', "_", env_file, repo, message],
@@ -70,3 +72,11 @@ def test_registered_hook_rejects_unconventional_commit(tmp_path):
 
 def test_registered_hook_accepts_conventional_commit(tmp_path):
     assert commit_in_session(tmp_path, "feat: add login page").returncode == 0
+
+
+def test_session_start_without_env_file_says_the_check_is_inactive():
+    """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook."""
+    env = {name: value for name, value in os.environ.items() if name != "CLAUDE_ENV_FILE"}
+    result = subprocess.run([SCRIPT], env=env, capture_output=True, text=True)
+    assert result.returncode == 0
+    assert len(result.stderr.splitlines()) == 1 and "not active" in result.stderr
