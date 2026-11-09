@@ -15,20 +15,21 @@ def conventional(message):
     return bool(re.match(HEADER, header)) and not rest.split("\n")[0].strip()
 
 
-def register(env_file, stderr):
+def register(env_file, stdout):
     """Make git run this script as the commit-msg hook in the Bash commands of the Claude Code session that owns env_file."""
     if not env_file:
-        print("The Conventional Commits check is not active: Claude Code gave this hook no CLAUDE_ENV_FILE to register it in.", file=stderr)
+        # Claude Code adds a SessionStart hook's stdout to Claude's context; Claude never sees its stderr.
+        print("The Conventional Commits check is not active: Claude Code gave this hook no CLAUDE_ENV_FILE to register it in.", file=stdout)
         return
     command = shlex.quote(str(Path(__file__).resolve()))  # git runs the command through a shell
-    # shortcut: replaces any GIT_CONFIG_COUNT already set in the session; offset the keys if something else sets it
+    # Each entry goes after those already counted, so other rules' and the user's GIT_CONFIG_* entries stay. The command comes first:
+    # git ignores a command with no event, but aborts on an event with no command, as a shell that stops partway through would leave.
     with open(env_file, "a") as session_env:
         session_env.write(
-            "export GIT_CONFIG_COUNT=2\n"
-            "export GIT_CONFIG_KEY_0=hook.conventional-commits.event\n"
-            "export GIT_CONFIG_VALUE_0=commit-msg\n"
-            "export GIT_CONFIG_KEY_1=hook.conventional-commits.command\n"
-            f"export GIT_CONFIG_VALUE_1={shlex.quote(command)}\n"
+            f"export GIT_CONFIG_KEY_${{GIT_CONFIG_COUNT:-0}}=hook.conventional-commits.command GIT_CONFIG_VALUE_${{GIT_CONFIG_COUNT:-0}}={shlex.quote(command)}\n"
+            "export GIT_CONFIG_COUNT=$((${GIT_CONFIG_COUNT:-0} + 1))\n"
+            "export GIT_CONFIG_KEY_${GIT_CONFIG_COUNT}=hook.conventional-commits.event GIT_CONFIG_VALUE_${GIT_CONFIG_COUNT}=commit-msg\n"
+            "export GIT_CONFIG_COUNT=$((GIT_CONFIG_COUNT + 1))\n"
         )
 
 
@@ -46,4 +47,4 @@ def main(message_file, stderr):
 
 if __name__ == "__main__":
     # git runs this script with the message file; Claude Code's SessionStart runs it with no arguments
-    sys.exit(main(sys.argv[1], sys.stderr) if len(sys.argv) > 1 else register(os.environ.get("CLAUDE_ENV_FILE"), sys.stderr))
+    sys.exit(main(sys.argv[1], sys.stderr) if len(sys.argv) > 1 else register(os.environ.get("CLAUDE_ENV_FILE"), sys.stdout))
