@@ -37,6 +37,7 @@ def message_file(tmp_path, message):
     pytest.param("feature: add login page", id="type_not_in_the_list"),
     pytest.param("feat: ", id="no_description"),
     pytest.param("fix: handle empty input\nThe body starts right under the header.", id="body_without_blank_line"),
+    pytest.param("fixup! Add login page\n\n", id="fixup_of_unconventional_commit"),
 ])
 def test_not_conventional(message):
     assert not conventional(message)
@@ -47,6 +48,10 @@ def test_not_conventional(message):
     pytest.param("feat(auth): add passkey login", id="scope"),
     pytest.param("feat(api)!: remove legacy endpoint", id="breaking_change"),
     pytest.param("fix: handle empty input\n\nAn empty form no longer crashes the page.\n\nRefs: #12", id="body_and_footer"),
+    pytest.param("fixup! feat: add login page\n\n", id="fixup_of_conventional_commit"),
+    pytest.param("squash! feat: add login page\n\nSquash note.\n", id="squash_of_conventional_commit"),
+    pytest.param("amend! feat: add login page\n\nfeat: add login page\n\nBody of the target.\n", id="amend_of_conventional_commit"),
+    pytest.param("fixup! fixup! feat: add login page\n\n", id="fixup_of_fixup_commit"),
 ])
 def test_conventional(message):
     assert conventional(message)

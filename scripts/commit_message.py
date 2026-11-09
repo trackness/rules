@@ -6,11 +6,11 @@ import shlex
 import sys
 from pathlib import Path
 
-HEADER = r"(?:feat|fix|docs|style|refactor|perf|test|build|ci|chore)(?:\([^()\s]+\))?!?: \S"
+HEADER = r"(?:(?:fixup|squash|amend)! )*(?:feat|fix|docs|style|refactor|perf|test|build|ci|chore)(?:\([^()\s]+\))?!?: \S"
 
 
 def conventional(message):
-    """True if the commit message follows Conventional Commits: a valid header, then a blank line before any body."""
+    """True if the commit message follows Conventional Commits: a valid header, which may follow git's fixup!, squash! or amend! prefixes, then a blank line before any body."""
     header, _, rest = message.partition("\n")
     return bool(re.match(HEADER, header)) and not rest.split("\n")[0].strip()
 
