@@ -21,7 +21,7 @@ def conventional(name):
 
 
 def new_branch_names(cmd):
-    """The names of the branches the shell command cmd creates or renames a branch to."""
+    """The names of the branches the shell command cmd creates, renames a branch to, or pushes to by a <src>:<dst> refspec."""
     try:
         words = shlex.split(cmd)
     except ValueError:  # an unbalanced quote, such as an apostrophe in a heredoc body, leaves no words to read
@@ -41,6 +41,13 @@ def new_branch_names(cmd):
         if "-m" in args or "-M" in args:
             return names[-1:]
         return [] if any(arg.startswith("-") for arg in args) else args[:1]
+    if subcommand == "push":
+        # shortcut: a value after -o, or --repo=, shifts which word is taken as the repository; parse push options if Claude pushes that way
+        repository_and_refspecs = [arg for arg in args if not arg.startswith("-")]
+        refspecs = [arg.partition(":") for arg in repository_and_refspecs[1:]]
+        # An empty <src> deletes <dst>, which must stay possible for a badly named branch.
+        destinations = [dst.removeprefix("refs/heads/") for src, colon, dst in refspecs if src and colon]
+        return [dst for dst in destinations if not dst.startswith("refs/")]  # a ref outside refs/heads/, such as a tag, is not a branch
     create_options = CREATE_OPTIONS.get(subcommand, ())
     return [args[i + 1] for i, arg in enumerate(args[:-1]) if arg in create_options]
 
