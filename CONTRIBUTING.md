@@ -4,7 +4,7 @@
 
 - Branch from `main`, naming the branch `<type>/<description>` per [Conventional Branch](https://conventionalbranch.org/): `feature/`, `bugfix/`, `hotfix/`, `release/` or `chore/`, lowercase and hyphen-separated.
 - Write commit messages per [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/), such as `feat: add …` or `fix: …`.
-- Open a pull request to `main`. It is squash-merged into a single commit.
+- Open a pull request to `main`.
 
 ## Adding or changing a rule
 
