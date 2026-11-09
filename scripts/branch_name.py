@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """PreToolUse hook: allow only Conventional Branch names for branches a Bash call creates."""
 import json
+import os
 import re
 import shlex
 import sys
 
+# shortcut: git after sudo or env options, such as sudo -u root git, is not checked; skip those options if Claude runs git that way
+COMMAND_PREFIXES = ("sudo", "env")
+ENVIRONMENT_ASSIGNMENT = r"[A-Za-z_]\w*="
 GIT_OPTIONS_WITH_VALUE = ("-c", "-C")
 # shortcut: --orphan, and git branch with -f or --track, are not checked; add them if Claude creates branches that way
 CREATE_OPTIONS = {"checkout": ("-b", "-B"), "switch": ("-c", "-C", "--create"), "worktree": ("-b", "-B")}
@@ -22,7 +26,9 @@ def new_branch_names(cmd):
         words = shlex.split(cmd)
     except ValueError:  # an unbalanced quote, such as an apostrophe in a heredoc body, leaves no words to read
         return []
-    if words[:1] != ["git"]:
+    while words and (words[0] in COMMAND_PREFIXES or re.match(ENVIRONMENT_ASSIGNMENT, words[0])):
+        words = words[1:]
+    if not words or os.path.basename(words[0]) != "git":
         return []
     words = words[1:]
     while words and words[0].startswith("-"):
