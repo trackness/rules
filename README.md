@@ -46,3 +46,7 @@ The tests use pytest, managed by [uv](https://docs.astral.sh/uv/) and pinned to 
 ```sh
 uv run pytest
 ```
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md).
