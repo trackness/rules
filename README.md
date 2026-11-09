@@ -9,6 +9,7 @@ A Claude Code plugin of hooks that enforce rules on how Claude uses its tools. E
 | One command per Bash call | `PreToolUse` on `Bash` | `scripts/one_command.py` |
 | Write only for new files | `PreToolUse` on `Write` | `scripts/new_files_only.py` |
 | No hard-wrapped Markdown | `PreToolUse` on `Write` and `Edit` | `scripts/no_hard_wrap.py` |
+| Conventional Branch names | `PreToolUse` on `Bash` | `scripts/branch_name.py` |
 
 When a hook blocks a call, Claude Code cancels it and shows Claude the hook's message.
 
@@ -56,6 +57,20 @@ MDX files (`.mdx`) are not checked, because their `import` lines and JSX are not
 Only line breaks the call writes are checked, so an Edit inside a paragraph someone else already wrapped is allowed. For an Edit, the hook checks the file as it will be after the edit, so a line added inside an existing code fence is allowed. With `replace_all`, only the first replacement is checked.
 
 Markdown renders the lines of a hard-wrapped paragraph as one line anyway, so the breaks only make the source harder to edit and diff.
+
+### Conventional Branch names
+
+Blocks a Bash call that creates a branch, or renames one, to a name that does not follow [Conventional Branch](https://conventionalbranch.org/), with a message naming the branch, such as:
+
+> Blocked: branch name Add_Login does not follow Conventional Branch. Use `<type>/<description>`, lowercase and hyphen-separated, with type feature, feat, bugfix, fix, hotfix, release or chore; dots are allowed only in a release version, such as release/v1.2.0. main, master and develop take no prefix.
+
+Checked: `git checkout -b` or `-B`, `git switch -c`, `-C` or `--create`, `git worktree add -b` or `-B`, `git branch <name>`, and `git branch -m` or `-M`, including after `git -C <path>` or `git -c <setting>`.
+
+Allowed: every other command, including `git branch -d` on a badly named branch, so it can still be deleted.
+
+Not checked: `--orphan`, `git branch` with `-f` or `--track`, and branches created other than through Bash.
+
+The name is checked when the branch is made, before it is pushed, while renaming it is still a local change.
 
 ## Requirements
 
