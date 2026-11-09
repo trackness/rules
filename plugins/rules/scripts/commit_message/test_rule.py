@@ -1,6 +1,9 @@
 """Tests for "Conventional Commits messages". Run from the repo root: uv run pytest"""
 import io
 import os
+import re
+import shlex
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -8,21 +11,57 @@ import pytest
 
 from .rule import conventional, main, register
 
+GIT_VERSION = tuple(int(part) for part in re.findall(r"\d+", subprocess.run(["git", "--version"], capture_output=True, text=True).stdout)[:3])
+needs_config_hooks = pytest.mark.skipif(GIT_VERSION < (2, 54, 0), reason="git runs hooks defined in config from 2.54.0")
+needs_zsh = pytest.mark.skipif(shutil.which("zsh") is None, reason="zsh is not installed")
 SCRIPT = Path(__file__).resolve().parent / "rule.py"
-TEST_IDENTITY = {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com"}
+# git in the tests reads none of the user's config, global, system or in the environment, such as a global core.hooksPath, and commits as a test identity.
+GIT_ENV = {
+    **{name: value for name, value in os.environ.items() if not name.startswith("GIT_CONFIG")}, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
+    "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com",
+}
+# Git config the session's environment already holds, such as the user's own or another rule's.
+EXISTING_GIT_CONFIG = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "test.kept", "GIT_CONFIG_VALUE_0": "yes"}
 
 
-def commit_in_session(tmp_path, message):
-    """Register the hook in a session env file, then commit in a new repo as Claude's Bash tool would, with that file sourced."""
+def commit_in_session(tmp_path, message, shell="bash", script=SCRIPT):
+    """Run the script as Claude Code's SessionStart hook does, then commit in a new repo as Claude's Bash tool would, with the env file sourced."""
     env_file, repo = tmp_path / "session.env", tmp_path / "repo"
     env_file.touch()  # Claude Code hands the hook an existing file to append to
-    register(str(env_file), io.StringIO())
-    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run([script], env={**os.environ, "CLAUDE_ENV_FILE": str(env_file)}, check=True)
+    subprocess.run(["git", "init", "-q", str(repo)], env=GIT_ENV, check=True)
     return subprocess.run(
-        ["bash", "-c", 'source "$1" && git -C "$2" -c commit.gpgsign=false commit --allow-empty -q -m "$3"', "_", env_file, repo, message],
-        env={**os.environ, **TEST_IDENTITY},
+        [shell, "-c", '. "$1" && git -C "$2" commit --allow-empty -q -m "$3"', "_", env_file, repo, message],
+        env=GIT_ENV,
         capture_output=True,
+        text=True,
     )
+
+
+def git(*args):
+    """Run git with the given arguments for a test's setup, and return its output."""
+    return subprocess.run(["git", *map(str, args)], env=GIT_ENV, check=True, capture_output=True, text=True).stdout
+
+
+def repo_with_side_branch(tmp_path):
+    """A new repo on main with a conventional commit, and a branch side holding one more commit, whose message is not conventional."""
+    repo = tmp_path / "repo"
+    git("init", "-q", "-b", "main", repo)
+    for branch, file, message in (("main", "start.txt", "feat: start"), ("side", "side.txt", "WIP on side")):
+        git("-C", repo, "switch", "-q", "-C", branch)
+        (repo / file).write_text(file)
+        git("-C", repo, "add", file)
+        git("-C", repo, "commit", "-q", "-m", message)
+    git("-C", repo, "switch", "-q", "main")
+    return repo
+
+
+def run_in_session(tmp_path, *command):
+    """Run the script as Claude Code's SessionStart hook does, then run the command as Claude's Bash tool would, with the env file sourced."""
+    env_file = tmp_path / "session.env"
+    env_file.touch()
+    subprocess.run([SCRIPT], env={**os.environ, "CLAUDE_ENV_FILE": str(env_file)}, check=True)
+    return subprocess.run(["bash", "-c", '. "$1" && shift && "$@"', "_", env_file, *map(str, command)], env=GIT_ENV, capture_output=True, text=True)
 
 
 def message_file(tmp_path, message):
@@ -35,6 +74,7 @@ def message_file(tmp_path, message):
 @pytest.mark.parametrize("message", [
     pytest.param("Add login page", id="no_type"),
     pytest.param("feature: add login page", id="type_not_in_the_list"),
+    pytest.param("Feat: add login page", id="type_not_in_lowercase"),
     pytest.param("feat: ", id="no_description"),
     pytest.param("fix: handle empty input\nThe body starts right under the header.", id="body_without_blank_line"),
     pytest.param("fixup! Add login page\n\n", id="fixup_of_unconventional_commit"),
@@ -45,6 +85,7 @@ def test_not_conventional(message):
 
 @pytest.mark.parametrize("message", [
     pytest.param("feat: add login page", id="type_and_description"),
+    *[pytest.param(f"{type}: change something", id=type) for type in ("fix", "docs", "style", "refactor", "perf", "test", "build", "ci", "chore")],
     pytest.param("feat(auth): add passkey login", id="scope"),
     pytest.param("feat(api)!: remove legacy endpoint", id="breaking_change"),
     pytest.param("fix: handle empty input\n\nAn empty form no longer crashes the page.\n\nRefs: #12", id="body_and_footer"),
@@ -71,17 +112,122 @@ def test_main_rejection_gives_a_reason(tmp_path):
     assert stderr.getvalue().strip() != ""
 
 
+@needs_config_hooks
 def test_registered_hook_rejects_unconventional_commit(tmp_path):
     assert commit_in_session(tmp_path, "Add login page").returncode != 0
 
 
+@needs_config_hooks
 def test_registered_hook_accepts_conventional_commit(tmp_path):
     assert commit_in_session(tmp_path, "feat: add login page").returncode == 0
 
 
-def test_session_start_without_env_file_says_the_check_is_inactive():
-    """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook."""
+@needs_config_hooks
+@pytest.mark.parametrize("shell", ["bash", pytest.param("zsh", marks=needs_zsh)])
+def test_registered_hook_runs_from_a_path_with_spaces_and_quotes(tmp_path, shell):
+    """The plugin can be installed under such a path; the session's shell must still parse the env file, and git still run the script."""
+    script = tmp_path / "it's a \"plugin\"" / "rule.py"
+    script.parent.mkdir()
+    shutil.copy(SCRIPT, script)
+    result = commit_in_session(tmp_path, "Add login page", shell=shell, script=script)
+    assert "Rejected: the commit message does not follow Conventional Commits" in result.stderr
+
+
+@needs_config_hooks
+@pytest.mark.parametrize("command", [
+    pytest.param(lambda repo, tmp_path: ["git", "-C", repo, "merge", "--no-ff", "-m", "Merge side", "side"], id="merge"),
+    pytest.param(lambda repo, tmp_path: ["git", "-C", repo, "commit", "--allow-empty", "-F", tmp_path / "message.txt"], id="message_file"),
+    pytest.param(lambda repo, tmp_path: ["bash", "-c", f"git -C '{repo}' commit --allow-empty -F - <<'EOF'\nAdd login page\nEOF"], id="heredoc"),
+    pytest.param(lambda repo, tmp_path: ["git", "-C", repo, "commit", "--amend", "-m", "Add login page"], id="amend"),
+])
+def test_registered_hook_rejects_unconventional_message_however_given(tmp_path, command):
+    repo = repo_with_side_branch(tmp_path)
+    (tmp_path / "message.txt").write_text("Add login page\n")
+    result = run_in_session(tmp_path, *command(repo, tmp_path))
+    assert result.returncode != 0 and "Rejected: the commit message does not follow Conventional Commits" in result.stderr
+
+
+@needs_config_hooks
+def test_repository_commit_msg_hook_still_runs_after_this_one(tmp_path):
+    repo = repo_with_side_branch(tmp_path)
+    ran = tmp_path / "repository-hook-ran"
+    repository_hook = repo / ".git" / "hooks" / "commit-msg"
+    repository_hook.write_text(f"#!/bin/sh\ntouch '{ran}'\n")
+    repository_hook.chmod(0o755)
+    # GIT_TRACE logs each hook git runs, in order.
+    result = run_in_session(tmp_path, "env", "GIT_TRACE=1", "git", "-C", repo, "commit", "--allow-empty", "-q", "-m", "feat: add login page")
+    hooks_run = [line for line in result.stderr.splitlines() if "trace: run_command:" in line and "COMMIT_EDITMSG" in line]
+    assert result.returncode == 0 and ran.exists()
+    assert [str(SCRIPT) in hooks_run[0], ".git/hooks/commit-msg" in hooks_run[-1]] == [True, True]
+
+
+@needs_config_hooks
+@pytest.mark.parametrize("command", [
+    pytest.param(lambda repo: ["git", "-C", repo, "commit", "--allow-empty", "-q", "--no-verify", "-m", "WIP"], id="commit_no_verify"),
+    pytest.param(lambda repo: ["git", "-C", repo, "merge", "--no-ff", "--no-verify", "-m", "WIP merge", "side"], id="merge_no_verify"),
+    pytest.param(lambda repo: ["git", "-C", repo, "revert", "--no-edit", "HEAD"], id="revert"),
+    pytest.param(lambda repo: ["git", "-C", repo, "cherry-pick", "side"], id="cherry_pick"),
+    pytest.param(lambda repo: ["git", "-C", repo, "commit-tree", "HEAD^{tree}", "-m", "WIP"], id="commit_tree"),
+    pytest.param(lambda repo: ["git", "-C", repo, "-c", "hook.conventional-commits.enabled=false", "commit", "--allow-empty", "-q", "-m", "WIP"], id="enabled_false"),
+    pytest.param(lambda repo: ["git", "-C", repo, "-c", "hook.conventional-commits.event=", "commit", "--allow-empty", "-q", "-m", "WIP"], id="empty_event"),
+    pytest.param(lambda repo: ["env", "GIT_CONFIG_COUNT=0", "git", "-C", repo, "commit", "--allow-empty", "-q", "-m", "WIP"], id="git_config_count_0"),
+    pytest.param(
+        lambda repo: ["env", "-i", f"PATH={os.environ['PATH']}", "git", "-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-q", "-m", "WIP"],
+        id="env_i",
+    ),
+])
+def test_ways_past_the_commit_msg_check_the_readme_lists(tmp_path, command):
+    """Each command makes a commit whose message is not conventional despite the registered hook, as the README's Not checked list says."""
+    repo = repo_with_side_branch(tmp_path)
+    assert run_in_session(tmp_path, *command(repo)).returncode == 0
+
+
+@needs_config_hooks
+def test_repository_config_can_turn_the_commit_msg_check_off(tmp_path):
+    """The README lists a repository's or user's hook.conventional-commits.enabled false among the ways past the check."""
+    repo = repo_with_side_branch(tmp_path)
+    git("-C", repo, "config", "hook.conventional-commits.enabled", "false")
+    assert run_in_session(tmp_path, "git", "-C", repo, "commit", "--allow-empty", "-q", "-m", "WIP").returncode == 0
+
+
+@pytest.mark.parametrize("shell", ["bash", pytest.param("zsh", marks=needs_zsh)])
+def test_registration_keeps_git_config_already_in_the_session(tmp_path, shell):
+    env_file = tmp_path / "session.env"
+    env_file.touch()
+    register(str(env_file), io.StringIO())
+    result = subprocess.run(
+        [shell, "-c", '. "$1" && git config --list --show-scope', "_", env_file], env={**GIT_ENV, **EXISTING_GIT_CONFIG}, capture_output=True, text=True
+    )
+    assert [line for line in result.stdout.splitlines() if line.startswith("command\t")] == [
+        "command\ttest.kept=yes",
+        f"command\thook.conventional-commits.command={shlex.quote(str(SCRIPT))}",
+        "command\thook.conventional-commits.event=commit-msg",
+    ]
+
+
+@needs_config_hooks
+def test_registration_cut_short_leaves_git_working(tmp_path):
+    """A shell can stop partway through the env file, such as at a line it cannot parse; what it has counted by then must leave git working."""
+    env_file, repo = tmp_path / "session.env", tmp_path / "repo"
+    env_file.touch()
+    register(str(env_file), io.StringIO())
+    env_file.write_text("".join(env_file.read_text().splitlines(keepends=True)[:2]))  # the first entry, and the count that takes it in
+    subprocess.run(["git", "init", "-q", str(repo)], env=GIT_ENV, check=True)
+    result = subprocess.run(
+        ["bash", "-c", '. "$1" && git -C "$2" commit --allow-empty -q -m "$3"', "_", env_file, repo, "feat: add login page"],
+        env=GIT_ENV,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_session_start_without_env_file_tells_claude_the_check_is_inactive():
+    """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook.
+
+    Claude Code adds a SessionStart hook's stdout at exit 0 to Claude's context; Claude never sees its stderr.
+    """
     env = {name: value for name, value in os.environ.items() if name != "CLAUDE_ENV_FILE"}
     result = subprocess.run([SCRIPT], env=env, capture_output=True, text=True)
     assert result.returncode == 0
-    assert len(result.stderr.splitlines()) == 1 and "not active" in result.stderr
+    assert len(result.stdout.splitlines()) == 1 and "not active" in result.stdout
