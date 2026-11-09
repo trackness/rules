@@ -1,0 +1,6 @@
+{
+  "name": "rules",
+  "version": "0.1.0",
+  "description": "Hooks that enforce rules on how Claude uses its tools.",
+  "author": { "name": "trackness" }
+}
