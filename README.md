@@ -77,7 +77,7 @@ Allowed:
 - `git branch -d`, and a `git push` deletion with an empty `<src>`, such as `git push origin :<name>`, so a badly named branch can still be deleted
 - a `git push` without a colon, such as `git push -u origin <name>`, because the local name was checked when the branch was made
 - a `git push` to a ref outside `refs/heads/`, such as a tag `refs/tags/v1.0.0`, or with a pattern refspec whose `<dst>` contains `*`, such as `refs/heads/*:refs/heads/*`, which stands for many existing names
-- the repository of a `git push`, even a URL with a colon such as `git@github.com:<owner>/<repo>.git`, and the value of an option given as the next word, such as `-o ci.skip`, `--push-option`, `--recurse-submodules`, `--receive-pack` or `--exec`: neither is read as a refspec, though the refspecs after them are still checked
+- the repository of a `git push`, even a URL with a colon such as `git@github.com:<owner>/<repo>.git`, options such as `--force-with-lease=<ref>:<expect>`, and the value of an option given as the next word, such as `-o ci.skip`, `--push-option`, `--recurse-submodules`, `--receive-pack` or `--exec`: none is read as a refspec, though the refspecs after them are still checked
 - a plain `gh pr checkout <number>`, which names the local branch after the pull request's own branch, not Claude's choice
 - every other command
 
