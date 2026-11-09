@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: allow only Conventional Branch names for branches a Bash call creates."""
+"""Allow only Conventional Branch names: a PreToolUse hook for the branches a Bash call creates, and git's pre-push hook for the remote branches a push creates."""
 import json
 import os
 import re
 import shlex
 import sys
+from pathlib import Path
 
 # shortcut: git after sudo or env options, such as sudo -u root git, is not checked; skip those options if Claude runs git that way
 COMMAND_PREFIXES = ("sudo", "env")
@@ -13,11 +14,16 @@ GIT_OPTIONS_WITH_VALUE = ("-c", "-C")
 PUSH_OPTIONS_WITH_VALUE = ("-o", "--push-option", "--recurse-submodules", "--receive-pack", "--exec")
 # shortcut: --orphan, and git branch with -f or --track, are not checked; add them if Claude creates branches that way
 CREATE_OPTIONS = {"checkout": ("-b", "-B"), "switch": ("-c", "-C", "--create"), "worktree": ("-b", "-B")}
-CONVENTIONAL = r"main|master|develop|(?:feature|feat|bugfix|fix|hotfix|chore)/[a-z0-9]+(?:-[a-z0-9]+)*|release/[a-z0-9]+(?:[-.][a-z0-9]+)*"
+# gh-pages is the branch GitHub Pages and the tools that publish to it name, not Claude.
+CONVENTIONAL = r"main|master|develop|gh-pages|(?:feature|feat|bugfix|fix|hotfix|chore)/[a-z0-9]+(?:-[a-z0-9]+)*|release/[a-z0-9]+(?:[-.][a-z0-9]+)*"
+NAMING = (
+    "Use <type>/<description>, lowercase and hyphen-separated, with type feature, feat, bugfix, fix, hotfix, release or chore; "
+    "dots are allowed only in a release version, such as release/v1.2.0. main, master, develop and gh-pages take no prefix."
+)
 
 
 def conventional(name):
-    """True if the branch name follows Conventional Branch."""
+    """True if the branch name follows Conventional Branch 1.0.0, or is gh-pages."""
     return bool(re.fullmatch(CONVENTIONAL, name))
 
 
@@ -66,23 +72,69 @@ def new_branch_names(cmd):
     return option_values(args, CREATE_OPTIONS.get(subcommand, ()))
 
 
-def main(stdin, stderr):
-    """Read the Bash tool call from stdin and return Claude Code's exit code.
+def register(env_file, stdout):
+    """Make git run this script as the pre-push hook in the Bash commands of the Claude Code session that owns env_file."""
+    if not env_file:
+        # Claude Code adds a SessionStart hook's stdout to Claude's context; Claude never sees its stderr.
+        print("The Conventional Branch check on pushes is not active: Claude Code gave this hook no CLAUDE_ENV_FILE to register it in.", file=stdout)
+        return
+    command = f"{shlex.quote(str(Path(__file__).resolve()))} pre-push"  # git runs the command through a shell
+    # Each entry goes after those already counted, so other rules' and the user's GIT_CONFIG_* entries stay. The command comes first:
+    # git ignores a command with no event, but aborts on an event with no command, as a shell that stops partway through would leave.
+    with open(env_file, "a") as session_env:
+        session_env.write(
+            f"export GIT_CONFIG_KEY_${{GIT_CONFIG_COUNT:-0}}=hook.conventional-branch.command GIT_CONFIG_VALUE_${{GIT_CONFIG_COUNT:-0}}={shlex.quote(command)}\n"
+            "export GIT_CONFIG_COUNT=$((${GIT_CONFIG_COUNT:-0} + 1))\n"
+            "export GIT_CONFIG_KEY_${GIT_CONFIG_COUNT}=hook.conventional-branch.event GIT_CONFIG_VALUE_${GIT_CONFIG_COUNT}=pre-push\n"
+            "export GIT_CONFIG_COUNT=$((GIT_CONFIG_COUNT + 1))\n"
+        )
 
-    A call that creates, renames or pushes to a branch with a name that isn't Conventional Branch gets a reason on stderr and 2, which blocks it;
-    anything else gets 0.
-    """
-    unconventional = [name for name in new_branch_names(json.load(stdin)["tool_input"]["command"]) if not conventional(name)]
+
+def new_remote_branches(push_lines):
+    """The names of the remote branches a push creates, from the lines <local-ref> <local-oid> <remote-ref> <remote-oid> git passes a pre-push hook."""
+    refs = [line.rsplit(maxsplit=3) for line in push_lines]  # the local ref is as typed, and can hold spaces, such as HEAD@{1 day ago}
+    # An all-zero remote object is a ref the remote doesn't have yet, and an all-zero local object a deletion, which must stay possible
+    # for a badly named branch; deleting a branch the remote no longer has gives both.
+    return [
+        remote_ref.removeprefix("refs/heads/")
+        for local_ref, local_oid, remote_ref, remote_oid in refs
+        if remote_ref.startswith("refs/heads/") and not remote_oid.strip("0") and local_oid.strip("0")
+    ]
+
+
+def pre_push(stdin, stderr):
+    """Check the refs git passes a pre-push hook on stdin and return git's exit code: 1 refuses the push, with a reason on stderr."""
+    unconventional = [name for name in new_remote_branches(stdin) if not conventional(name)]
     if not unconventional:
         return 0
+    branches, names_do = ("branch", "name does") if len(unconventional) == 1 else ("branches", "names do")
     print(
-        f"Blocked: branch name {', '.join(unconventional)} does not follow Conventional Branch. "
-        "Use <type>/<description>, lowercase and hyphen-separated, with type feature, feat, bugfix, fix, hotfix, release or chore; "
-        "dots are allowed only in a release version, such as release/v1.2.0. main, master and develop take no prefix.",
+        f"Rejected: this push would create the remote {branches} {', '.join(unconventional)}, whose {names_do} not follow Conventional Branch 1.0.0, so nothing was pushed. "
+        "Rename the local branch to a conventional name with git branch -m <old> <new> and push it under that name, or, for a <src>:<dst> refspec, push to a conventional <dst>. "
+        + NAMING,
         file=stderr,
     )
+    return 1
+
+
+def main(stdin, stdout, stderr, env_file=None):
+    """Read the Claude Code hook's input from stdin and return Claude Code's exit code.
+
+    At SessionStart, register this script as git's pre-push hook in env_file.
+    A Bash call that creates, renames or pushes to a branch with a name that isn't Conventional Branch gets a reason on stderr and 2, which blocks it;
+    anything else gets 0.
+    """
+    hook_input = json.load(stdin)
+    if hook_input.get("hook_event_name") == "SessionStart":
+        register(env_file, stdout)
+        return 0
+    unconventional = [name for name in new_branch_names(hook_input["tool_input"]["command"]) if not conventional(name)]
+    if not unconventional:
+        return 0
+    print(f"Blocked: branch name {', '.join(unconventional)} does not follow Conventional Branch 1.0.0. {NAMING}", file=stderr)
     return 2
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.stdin, sys.stderr))
+    # git runs this script as its pre-push hook with the argument pre-push, then the remote's name and URL; Claude Code runs it with no arguments
+    sys.exit(pre_push(sys.stdin, sys.stderr) if sys.argv[1:2] == ["pre-push"] else main(sys.stdin, sys.stdout, sys.stderr, os.environ.get("CLAUDE_ENV_FILE")))
