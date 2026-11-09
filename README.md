@@ -7,6 +7,7 @@ A Claude Code plugin of hooks that enforce rules on how Claude uses its tools. E
 | Rule | Hook | Script |
 |---|---|---|
 | One command per Bash call | `PreToolUse` on `Bash` | `scripts/one_command.py` |
+| Write only for new files | `PreToolUse` on `Write` | `scripts/new_files_only.py` |
 
 When a hook blocks a call, Claude Code cancels it and shows Claude the hook's message.
 
@@ -27,6 +28,16 @@ Checked even though quoted, because it runs as commands:
 - the argument to any shell's `-c` (including combined flags such as `-lc`), to `eval` or to `ssh`
 - a `$(…)` or backticks inside double quotes
 - a heredoc fed to a shell or to `ssh`
+
+### Write only for new files
+
+Blocks a Write to a file that already exists, with this message:
+
+> Blocked: Write is only for new files, and this one already exists. Change it with Edit, or NotebookEdit for a notebook.
+
+Allowed: a Write that creates a new file.
+
+Write replaces the whole file, so anything left out of the new content is lost, while Edit changes only the text it names. Claude Code's own check on Write only requires the file to have been Read first. An empty file is blocked too, because Edit with an empty `old_string` fills it.
 
 ## Requirements
 
