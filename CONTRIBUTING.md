@@ -15,7 +15,7 @@ A rule needs:
 3. Tests in `tests/`, built by test-driven development, one realistic case per cycle. The tests import the script's functions and call them directly.
    - Red: write one test and run it. It must fail, and fail because the behaviour is missing, not with an error. A test that passes on its first run proves nothing until you have seen it fail against a deliberately broken version of the code.
    - Green: write the least code that makes it pass.
-   - Refactor: with the test passing, rework anything in the code or the tests that is duplicated or hard to follow, without adding behaviour; anything new starts its own cycle with a failing test. Re-run the tests for the code you changed after each change.
+   - Refactor: with the test passing, improve the code and the tests without changing their behaviour; anything new starts its own cycle with a failing test. Re-run the tests for the code you changed after each change.
 4. A row in the README's rules table, and a section saying what the rule blocks, what it allows, and why.
 
 Name things so the code explains itself, and comment only on why, where the code cannot show it.
