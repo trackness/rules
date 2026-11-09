@@ -7,25 +7,25 @@ from pathlib import Path
 
 LIST_ITEM = r"\s*(?:[-*+]|\d+[.)]) "
 OTHER_BLOCK = r"\s*(?:#{1,6} |[|<>]|\[[^\]]+\]:)"
-FENCE = r"\s*(?:```|~~~)"
+FENCE = r"\s*(`{3,}|~{3,})"
 
 
 def hard_wraps(text):
     """The offsets in the Markdown text of each line break that hard-wraps a paragraph or list item."""
     breaks = []
     offset = -1  # of the line break before the current line
-    in_fence = False
+    fence = ""  # the backticks or tildes that opened the code block the current line is in, if any
     continuable = False  # whether the previous line is text that the current line could continue
     front_matter = text.startswith(("---\n", "---\r\n"))
     for number, line in enumerate(text.split("\n")):
         if front_matter:
             front_matter = number == 0 or line.rstrip("\r") != "---"
             continuable = False
-        elif re.match(FENCE, line):
-            # shortcut: any fence line closes an open fence, even ~~~ inside ``` or ``` inside ````; match the opening fence if fenced examples of fences get flagged
-            in_fence = not in_fence
+        elif (match := re.match(FENCE, line)) and match[1].startswith(fence):
+            # as in CommonMark, only a run of the opening fence's character at least as long closes it, so a fence can show other fences
+            fence = "" if fence else match[1]
             continuable = False
-        elif in_fence or not line.strip():
+        elif fence or not line.strip():
             continuable = False
         else:
             if continuable and not re.match(LIST_ITEM, line) and not re.match(OTHER_BLOCK, line):

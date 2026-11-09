@@ -49,7 +49,7 @@ Blocks a Write or Edit to a `.md` or `.markdown` file that breaks a paragraph or
 A line continues the one before it when both hold text and the second does not start a block of its own. Allowed, because each line starts a block or is not prose:
 
 - list items (`-`, `*`, `+`, `1.`, `1)`), headings, table rows, blockquotes (including GitHub alerts such as `> [!NOTE]`), HTML and link reference definitions
-- anything inside a code block fenced with backticks or tildes, or inside the YAML front matter at the top of the file, whether its lines end in LF or CRLF
+- anything inside a code block fenced with backticks or tildes, or inside the YAML front matter at the top of the file, whether its lines end in LF or CRLF. As in CommonMark, a fence closes only at a line of the same character at least as long as the one that opened it, so a code block can show another fence, such as a `~~~` fence inside a backtick one or a three-backtick fence inside a four-backtick one
 
 MDX files (`.mdx`) are not checked, because their `import` lines and JSX are not prose.
 

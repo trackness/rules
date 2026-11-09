@@ -41,6 +41,8 @@ def test_hard_wraps(text):
     pytest.param("| Rule | Script |\n|---|---|\n| One command | `one_command.py` |\n", id="table_rows"),
     pytest.param("Run:\n\n```sh\nuv sync\nuv run pytest\n```\n", id="fenced_code"),
     pytest.param("Run:\n\n~~~sh\nuv sync\nuv run pytest\n~~~\n", id="tilde_fenced_code"),
+    pytest.param("Fence the commands with tildes:\n\n```markdown\n~~~sh\nuv sync\nuv run pytest\n~~~\n```\n", id="backtick_fence_showing_tilde_fence"),
+    pytest.param("Fence the commands like this:\n\n````markdown\n```sh\nuv sync\nuv run pytest\n```\n````\n", id="longer_fence_showing_shorter_fence"),
     pytest.param("---\nname: rules\ndescription: Hooks that enforce rules.\n---\n\nThe body.\n", id="front_matter"),
     pytest.param("---\r\nname: rules\r\ndescription: Hooks that enforce rules.\r\n---\r\n\r\nThe body.\r\n", id="front_matter_with_crlf"),
     pytest.param('<p align="center">\n  <img src="logo.png" alt="Logo">\n</p>\n', id="html_block"),
