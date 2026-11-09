@@ -10,6 +10,7 @@ A Claude Code plugin of hooks that enforce rules on how Claude uses its tools. E
 | Write only for new files | `PreToolUse` on `Write` | `scripts/new_files_only.py` |
 | No hard-wrapped Markdown | `PreToolUse` on `Write` and `Edit` | `scripts/no_hard_wrap.py` |
 | Conventional Branch names | `PreToolUse` on `Bash` | `scripts/branch_name.py` |
+| Conventional Commits messages | `PreToolUse` on `Bash` | `scripts/commit_message.py` |
 
 When a hook blocks a call, Claude Code cancels it and shows Claude the hook's message.
 
@@ -91,6 +92,20 @@ Not checked:
 - branches created other than through Bash
 
 The name is checked when the branch is made, before it is pushed, while renaming it is still a local change. A push refspec is checked too, because it can give the remote branch a name that was never checked locally.
+
+### Conventional Commits messages
+
+Blocks a `git commit` whose message does not follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/), with this message:
+
+> Blocked: the commit message does not follow Conventional Commits. Start it with `<type>[optional scope][!]: <description>`, with type feat, fix, docs, style, refactor, perf, test, build, ci or chore, and leave a blank line before any body.
+
+The message is read from every `-m` (including combined flags such as `-am`) and `--message`, joined into paragraphs as git joins them, and from the body of a `"$(cat <<'EOF' … EOF)"` heredoc, including after `git -C <path>` or `git -c <setting>`. The type must be one of the ten above, in lowercase.
+
+Allowed: every other command, including a `git commit` with no message option, such as `git commit --amend --no-edit`.
+
+Not checked: a message passed with `-F` or `--file`, and commits made other than through Bash.
+
+The message is checked before the commit exists, while fixing it costs nothing; afterwards it takes an amend, or a rebase once other commits follow.
 
 ## Requirements
 
