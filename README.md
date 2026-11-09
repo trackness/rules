@@ -10,6 +10,7 @@ A Claude Code plugin of hooks that enforce rules on how Claude uses its tools. E
 | Write only for new files | `PreToolUse` on `Write` | `scripts/new_files_only.py` |
 | No hard-wrapped Markdown | `PreToolUse` on `Write` and `Edit` | `scripts/no_hard_wrap.py` |
 | Conventional Branch names | `PreToolUse` on `Bash` | `scripts/branch_name.py` |
+| Conventional Commits messages | `SessionStart`, then git's `commit-msg` | `scripts/commit_message.py` |
 
 When a hook blocks a call, Claude Code cancels it and shows Claude the hook's message.
 
@@ -91,6 +92,18 @@ Not checked:
 - branches created other than through Bash
 
 The name is checked when the branch is made, before it is pushed, while renaming it is still a local change. A push refspec is checked too, because it can give the remote branch a name that was never checked locally.
+
+### Conventional Commits messages
+
+Makes git reject a commit Claude makes whose message does not follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/), with this message:
+
+> Rejected: the commit message does not follow Conventional Commits. Start it with `<type>[optional scope][!]: <description>`, with type feat, fix, docs, style, refactor, perf, test, build, ci or chore, and leave a blank line before any body.
+
+When a session starts, the script adds `GIT_CONFIG_*` variables to the session's environment that register it as git's `commit-msg` hook. Git then checks the final message of every commit, merges included, made through Claude's Bash commands, however the message was given (`-m`, `-F`, a heredoc or `--amend`), and still runs the repository's own `commit-msg` hook after it. Nothing is installed in any repository or git config, so commits made outside Claude are not checked. The type must be one of the ten above, in lowercase. A `git commit --fixup`, `--squash` or `--fixup=amend:` message, which puts `fixup! `, `squash! ` or `amend! ` before the target commit's subject, is accepted when what follows the prefixes is a conventional header.
+
+Not checked: `git commit --no-verify`, which skips commit hooks; commits made with a git older than 2.54.0, the first release with hooks defined in config; and commits in a session whose `SessionStart` hook got no `CLAUDE_ENV_FILE`, such as one run in PowerShell, in which case the script says at session start that the check is not active.
+
+Git checks the message it is about to record, so no way of writing the command gets around it, and the check stays inside Claude's sessions.
 
 ## Requirements
 

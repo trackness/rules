@@ -20,6 +20,13 @@
           { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/no_hard_wrap.py" }
         ]
       }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/commit_message.py" }
+        ]
+      }
     ]
   }
 }
