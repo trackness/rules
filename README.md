@@ -87,6 +87,7 @@ Not checked:
 - the alias `gh pr co`
 - the refspecs of a `git push` with `--repo=<repository>` or `-o <option>`, which shift which argument is read as the repository, so a refspec can be missed or a repository URL read as one
 - git or gh after options to `sudo` or `env`, such as `sudo -u root git`, or run by another command, such as `bash -c` or `xargs`
+- a command with an unbalanced quote, such as an apostrophe in a heredoc body, which cannot be split into words
 - branches created other than through Bash
 
 The name is checked when the branch is made, before it is pushed, while renaming it is still a local change. A push refspec is checked too, because it can give the remote branch a name that was never checked locally.
