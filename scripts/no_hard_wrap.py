@@ -22,6 +22,7 @@ def hard_wraps(text):
             front_matter = number == 0 or line.rstrip("\r") != "---"
             continuable = False
         elif re.match(FENCE, line):
+            # shortcut: any fence line closes an open fence, even ~~~ inside ``` or ``` inside ````; match the opening fence if fenced examples of fences get flagged
             in_fence = not in_fence
             continuable = False
         elif in_fence or not line.strip():
