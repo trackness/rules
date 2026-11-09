@@ -20,6 +20,12 @@ def conventional(name):
     return bool(re.fullmatch(CONVENTIONAL, name))
 
 
+# shortcut: a value joined to its option, such as --create=<name> or -b<name>, is not read; split it off if Claude writes options that way
+def option_values(args, options):
+    """The words in args that follow any of the given options."""
+    return [args[i + 1] for i, arg in enumerate(args[:-1]) if arg in options]
+
+
 def new_branch_names(cmd):
     """The names of the branches the shell command cmd creates, renames a branch to, or pushes to by a <src>:<dst> refspec."""
     try:
@@ -28,7 +34,12 @@ def new_branch_names(cmd):
         return []
     while words and (words[0] in COMMAND_PREFIXES or re.match(ENVIRONMENT_ASSIGNMENT, words[0])):
         words = words[1:]
-    if not words or os.path.basename(words[0]) != "git":
+    program = os.path.basename(words[0]) if words else ""
+    if program == "gh":
+        # Without -b or --branch, gh names the branch after the pull request's own branch, which is not Claude's choice.
+        # shortcut: the alias gh pr co is not checked; add it if Claude checks out pull requests that way
+        return option_values(words[3:], ("-b", "--branch")) if words[1:3] == ["pr", "checkout"] else []
+    if program != "git":
         return []
     words = words[1:]
     while words and words[0].startswith("-"):
@@ -48,14 +59,13 @@ def new_branch_names(cmd):
         # An empty <src> deletes <dst>, which must stay possible for a badly named branch.
         destinations = [dst.removeprefix("refs/heads/") for src, colon, dst in refspecs if src and colon]
         return [dst for dst in destinations if not dst.startswith("refs/")]  # a ref outside refs/heads/, such as a tag, is not a branch
-    create_options = CREATE_OPTIONS.get(subcommand, ())
-    return [args[i + 1] for i, arg in enumerate(args[:-1]) if arg in create_options]
+    return option_values(args, CREATE_OPTIONS.get(subcommand, ()))
 
 
 def main(stdin, stderr):
     """Read the Bash tool call from stdin and return Claude Code's exit code.
 
-    A call that creates or renames a branch to a name that isn't Conventional Branch gets a reason on stderr and 2, which blocks it;
+    A call that creates, renames or pushes to a branch with a name that isn't Conventional Branch gets a reason on stderr and 2, which blocks it;
     anything else gets 0.
     """
     unconventional = [name for name in new_branch_names(json.load(stdin)["tool_input"]["command"]) if not conventional(name)]
