@@ -1,8 +1,8 @@
-"""Tests for scripts/new_files_only.py. Run from the repo root: uv run pytest"""
+"""Tests for "Write only for new files". Run from the repo root: uv run pytest"""
 import io
 import json
 
-from scripts.new_files_only import main
+from .rule import main
 
 
 def tool_call(file_path):

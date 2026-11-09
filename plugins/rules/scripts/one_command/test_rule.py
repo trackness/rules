@@ -1,10 +1,10 @@
-"""Tests for scripts/one_command.py. Run from the repo root: uv run pytest"""
+"""Tests for "One command per Bash call". Run from the repo root: uv run pytest"""
 import io
 import json
 
 import pytest
 
-from scripts.one_command import chains, main
+from .rule import chains, main
 
 
 def tool_call(cmd):

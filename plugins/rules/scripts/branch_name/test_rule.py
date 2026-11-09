@@ -1,10 +1,10 @@
-"""Tests for scripts/branch_name.py. Run from the repo root: uv run pytest"""
+"""Tests for "Conventional Branch names". Run from the repo root: uv run pytest"""
 import io
 import json
 
 import pytest
 
-from scripts.branch_name import conventional, main, new_branch_names
+from .rule import conventional, main, new_branch_names
 
 
 def tool_call(cmd):

@@ -1,4 +1,4 @@
-"""Tests for scripts/commit_message.py. Run from the repo root: uv run pytest"""
+"""Tests for "Conventional Commits messages". Run from the repo root: uv run pytest"""
 import io
 import os
 import subprocess
@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from scripts.commit_message import conventional, main, register
+from .rule import conventional, main, register
 
-SCRIPT = Path(__file__).resolve().parent.parent / "scripts" / "commit_message.py"
+SCRIPT = Path(__file__).resolve().parent / "rule.py"
 TEST_IDENTITY = {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com"}
 
 
