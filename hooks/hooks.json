@@ -4,7 +4,8 @@
       {
         "matcher": "Bash",
         "hooks": [
-          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/one_command.py" }
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/one_command.py" },
+          { "type": "command", "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/branch_name.py" }
         ]
       },
       {
