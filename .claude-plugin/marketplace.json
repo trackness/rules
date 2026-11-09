@@ -2,5 +2,5 @@
   "name": "rules",
   "owner": { "name": "trackness" },
   "description": "Hooks that enforce rules on how Claude uses its tools.",
-  "plugins": [{ "name": "rules", "source": "./" }]
+  "plugins": [{ "name": "rules", "source": "./plugins/rules" }]
 }

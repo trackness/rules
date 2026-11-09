@@ -2,4 +2,4 @@ __pycache__/
 .idea/
 .venv/
 .pytest_cache/
-.claude-plugin/types/
+plugins/rules/.claude-plugin/types/

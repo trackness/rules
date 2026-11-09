@@ -1,10 +1,10 @@
-"""Tests for scripts/no_hard_wrap.py. Run from the repo root: uv run pytest"""
+"""Tests for "No hard-wrapped Markdown". Run from the repo root: uv run pytest"""
 import io
 import json
 
 import pytest
 
-from scripts.no_hard_wrap import hard_wraps, main
+from .rule import hard_wraps, main
 
 WRAPPED = "# Title\n\nThis paragraph runs on\nto a second line.\n"
 
