@@ -1,15 +1,33 @@
 """Tests for scripts/commit_message.py. Run from the repo root: uv run pytest"""
 import io
-import json
+import os
+import subprocess
 
 import pytest
 
-from scripts.commit_message import commit_message, conventional, main
+from scripts.commit_message import conventional, main, register
+
+TEST_IDENTITY = {"GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com"}
 
 
-def tool_call(cmd):
-    """A Bash tool call as Claude Code sends it to the hook on stdin."""
-    return io.StringIO(json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}}))
+def commit_in_session(tmp_path, message):
+    """Register the hook in a session env file, then commit in a new repo as Claude's Bash tool would, with that file sourced."""
+    env_file, repo = tmp_path / "session.env", tmp_path / "repo"
+    env_file.touch()  # Claude Code hands the hook an existing file to append to
+    register(str(env_file))
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    return subprocess.run(
+        ["bash", "-c", 'source "$1" && git -C "$2" -c commit.gpgsign=false commit --allow-empty -q -m "$3"', "_", env_file, repo, message],
+        env={**os.environ, **TEST_IDENTITY},
+        capture_output=True,
+    )
+
+
+def message_file(tmp_path, message):
+    """The file git passes to a commit-msg hook, holding the message."""
+    path = tmp_path / "COMMIT_EDITMSG"
+    path.write_text(message)
+    return str(path)
 
 
 @pytest.mark.parametrize("message", [
@@ -32,44 +50,23 @@ def test_conventional(message):
     assert conventional(message)
 
 
-@pytest.mark.parametrize("cmd, message", [
-    pytest.param('git commit -m "feat: add login page"', "feat: add login page", id="m"),
-    pytest.param('git commit -m "feat: add login page" -m "With a form."', "feat: add login page\n\nWith a form.", id="m_twice"),
-    pytest.param('git commit -am "fix: handle empty input"', "fix: handle empty input", id="am"),
-    pytest.param('git commit --message="fix: handle empty input"', "fix: handle empty input", id="long_option"),
-    pytest.param('git commit --message "fix: handle empty input"', "fix: handle empty input", id="long_option_separate_value"),
-    pytest.param(
-        "git commit -m \"$(cat <<'EOF'\n"
-        "fix: don't crash on empty input\n"
-        "\n"
-        "An empty form no longer crashes the page.\n"
-        "EOF\n"
-        ')"',
-        "fix: don't crash on empty input\n\nAn empty form no longer crashes the page.",
-        id="heredoc",
-    ),
-    pytest.param('git merge -m "Merge the login branch" feature/add-login', None, id="not_commit"),
-    pytest.param('git -C /repo commit -m "Add login page"', "Add login page", id="git_directory_option"),
-    pytest.param('git -c commit.gpgsign=false commit -m "Add login page"', "Add login page", id="git_config_option"),
-    pytest.param("cat > notes.txt <<'EOF'\nDon't stop.\nEOF", None, id="unbalanced_quote_in_heredoc"),
-])
-def test_commit_message(cmd, message):
-    assert commit_message(cmd) == message
+def test_main_rejects_unconventional_message(tmp_path):
+    assert main(message_file(tmp_path, "Add login page\n"), io.StringIO()) == 1
 
 
-def test_main_blocks_unconventional_commit_message():
-    assert main(tool_call('git commit -m "Add login page"'), io.StringIO()) == 2
+def test_main_accepts_conventional_message(tmp_path):
+    assert main(message_file(tmp_path, "feat: add login page\n"), io.StringIO()) == 0
 
 
-def test_main_allows_conventional_commit_message():
-    assert main(tool_call('git commit -m "feat: add login page"'), io.StringIO()) == 0
-
-
-def test_main_allows_command_without_commit_message():
-    assert main(tool_call("ls -la"), io.StringIO()) == 0
-
-
-def test_main_block_gives_a_reason():
+def test_main_rejection_gives_a_reason(tmp_path):
     stderr = io.StringIO()
-    main(tool_call('git commit -m "Add login page"'), stderr)
+    main(message_file(tmp_path, "Add login page\n"), stderr)
     assert stderr.getvalue().strip() != ""
+
+
+def test_registered_hook_rejects_unconventional_commit(tmp_path):
+    assert commit_in_session(tmp_path, "Add login page").returncode != 0
+
+
+def test_registered_hook_accepts_conventional_commit(tmp_path):
+    assert commit_in_session(tmp_path, "feat: add login page").returncode == 0

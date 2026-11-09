@@ -10,7 +10,7 @@ A Claude Code plugin of hooks that enforce rules on how Claude uses its tools. E
 | Write only for new files | `PreToolUse` on `Write` | `scripts/new_files_only.py` |
 | No hard-wrapped Markdown | `PreToolUse` on `Write` and `Edit` | `scripts/no_hard_wrap.py` |
 | Conventional Branch names | `PreToolUse` on `Bash` | `scripts/branch_name.py` |
-| Conventional Commits messages | `PreToolUse` on `Bash` | `scripts/commit_message.py` |
+| Conventional Commits messages | `SessionStart`, then git's `commit-msg` | `scripts/commit_message.py` |
 
 When a hook blocks a call, Claude Code cancels it and shows Claude the hook's message.
 
@@ -95,17 +95,15 @@ The name is checked when the branch is made, before it is pushed, while renaming
 
 ### Conventional Commits messages
 
-Blocks a `git commit` whose message does not follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/), with this message:
+Makes git reject a commit Claude makes whose message does not follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/), with this message:
 
-> Blocked: the commit message does not follow Conventional Commits. Start it with `<type>[optional scope][!]: <description>`, with type feat, fix, docs, style, refactor, perf, test, build, ci or chore, and leave a blank line before any body.
+> Rejected: the commit message does not follow Conventional Commits. Start it with `<type>[optional scope][!]: <description>`, with type feat, fix, docs, style, refactor, perf, test, build, ci or chore, and leave a blank line before any body.
 
-The message is read from every `-m` (including combined flags such as `-am`) and `--message`, joined into paragraphs as git joins them, and from the body of a `"$(cat <<'EOF' … EOF)"` heredoc, including after `git -C <path>` or `git -c <setting>`. The type must be one of the ten above, in lowercase.
+When a session starts, the script adds `GIT_CONFIG_*` variables to the session's environment that register it as git's `commit-msg` hook. Git then checks the final message of every commit, merges included, made through Claude's Bash commands, however the message was given (`-m`, `-F`, a heredoc or `--amend`), and still runs the repository's own `commit-msg` hook after it. Nothing is installed in any repository or git config, so commits made outside Claude are not checked. The type must be one of the ten above, in lowercase.
 
-Allowed: every other command, including a `git commit` with no message option, such as `git commit --amend --no-edit`.
+Not checked: `git commit --no-verify`, which skips commit hooks, and commits made with a git too old for hooks defined in config (2.54 has them).
 
-Not checked: a message passed with `-F` or `--file`, and commits made other than through Bash.
-
-The message is checked before the commit exists, while fixing it costs nothing; afterwards it takes an amend, or a rebase once other commits follow.
+Git checks the message it is about to record, so no way of writing the command gets around it, and the check stays inside Claude's sessions.
 
 ## Requirements
 

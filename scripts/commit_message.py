@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""PreToolUse hook: allow only Conventional Commits messages in git commit calls."""
-import json
+"""Allow only Conventional Commits messages in the commits Claude makes."""
+import os
 import re
 import shlex
 import sys
+from pathlib import Path
 
-GIT_OPTIONS_WITH_VALUE = ("-c", "-C")
-# shortcut: a message passed with -F or --file is not read; read the file if Claude starts committing that way
-MESSAGE_OPTION = r"-[a-zA-Z]*m|--message"  # -m, or short flags combined with it such as -am
-HEREDOC = r"\$\(cat <<-?\s*(['\"]?)(\w+)\1\n(?P<body>.*)\n\s*\2\s*\)"
 HEADER = r"(?:feat|fix|docs|style|refactor|perf|test|build|ci|chore)(?:\([^()\s]+\))?!?: \S"
 
 
@@ -18,49 +15,32 @@ def conventional(message):
     return bool(re.match(HEADER, header)) and not rest.split("\n")[0].strip()
 
 
-def commit_message(cmd):
-    """The message the shell command cmd gives git commit, or None if it gives none."""
-    try:
-        words = shlex.split(cmd)
-    except ValueError:  # an unbalanced quote, such as an apostrophe in a heredoc body, leaves no words to read
-        return None
-    if words[:1] != ["git"]:
-        return None
-    words = words[1:]
-    while words and words[0].startswith("-"):
-        words = words[2:] if words[0] in GIT_OPTIONS_WITH_VALUE else words[1:]
-    if words[:1] != ["commit"]:
-        return None
-    paragraphs = []
-    for i, word in enumerate(words):
-        if re.fullmatch(MESSAGE_OPTION, word) and i + 1 < len(words):
-            paragraphs.append(words[i + 1])
-        elif word.startswith("--message="):
-            paragraphs.append(word.removeprefix("--message="))
-    return "\n\n".join(heredoc_body(paragraph) for paragraph in paragraphs) if paragraphs else None
+def register(env_file):
+    """Make git run this script as the commit-msg hook in the Bash commands of the Claude Code session that owns env_file."""
+    command = shlex.quote(str(Path(__file__).resolve()))  # git runs the command through a shell
+    # shortcut: replaces any GIT_CONFIG_COUNT already set in the session; offset the keys if something else sets it
+    with open(env_file, "a") as session_env:
+        session_env.write(
+            "export GIT_CONFIG_COUNT=2\n"
+            "export GIT_CONFIG_KEY_0=hook.conventional-commits.event\n"
+            "export GIT_CONFIG_VALUE_0=commit-msg\n"
+            "export GIT_CONFIG_KEY_1=hook.conventional-commits.command\n"
+            f"export GIT_CONFIG_VALUE_1={shlex.quote(command)}\n"
+        )
 
 
-def heredoc_body(text):
-    """The body of a "$(cat <<'EOF' … EOF)" message, or the text itself."""
-    heredoc = re.fullmatch(HEREDOC, text, flags=re.S)
-    return heredoc["body"] if heredoc else text
-
-
-def main(stdin, stderr):
-    """Read the Bash tool call from stdin and return Claude Code's exit code.
-
-    A git commit whose message isn't Conventional Commits gets a reason on stderr and 2, which blocks it; anything else gets 0.
-    """
-    message = commit_message(json.load(stdin)["tool_input"]["command"])
-    if message is None or conventional(message):
+def main(message_file, stderr):
+    """Check the message git passes to a commit-msg hook and return git's exit code: 1 rejects the commit, with a reason on stderr."""
+    if conventional(Path(message_file).read_text()):
         return 0
     print(
-        "Blocked: the commit message does not follow Conventional Commits. Start it with <type>[optional scope][!]: <description>, "
+        "Rejected: the commit message does not follow Conventional Commits. Start it with <type>[optional scope][!]: <description>, "
         "with type feat, fix, docs, style, refactor, perf, test, build, ci or chore, and leave a blank line before any body.",
         file=stderr,
     )
-    return 2
+    return 1
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.stdin, sys.stderr))
+    # git runs this script with the message file; Claude Code's SessionStart runs it with no arguments
+    sys.exit(main(sys.argv[1], sys.stderr) if len(sys.argv) > 1 else register(os.environ["CLAUDE_ENV_FILE"]))
