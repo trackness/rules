@@ -10,6 +10,7 @@ import sys
 COMMAND_PREFIXES = ("sudo", "env")
 ENVIRONMENT_ASSIGNMENT = r"[A-Za-z_]\w*="
 GIT_OPTIONS_WITH_VALUE = ("-c", "-C")
+PUSH_OPTIONS_WITH_VALUE = ("-o", "--push-option", "--recurse-submodules", "--receive-pack", "--exec")
 # shortcut: --orphan, and git branch with -f or --track, are not checked; add them if Claude creates branches that way
 CREATE_OPTIONS = {"checkout": ("-b", "-B"), "switch": ("-c", "-C", "--create"), "worktree": ("-b", "-B")}
 CONVENTIONAL = r"main|master|develop|(?:feature|feat|bugfix|fix|hotfix|chore)/[a-z0-9]+(?:-[a-z0-9]+)*|release/[a-z0-9]+(?:[-.][a-z0-9]+)*"
@@ -53,12 +54,15 @@ def new_branch_names(cmd):
             return names[-1:]
         return [] if any(arg.startswith("-") for arg in args) else args[:1]
     if subcommand == "push":
-        # shortcut: a value after -o, or --repo=, shifts which word is taken as the repository; parse push options if Claude pushes that way
-        repository_and_refspecs = [arg for arg in args if not arg.startswith("-")]
+        # The word after an option that takes a value is that value; of the other words, git takes the first as the repository, even with --repo.
+        repository_and_refspecs = [
+            arg for previous, arg in zip([None, *args], args) if not arg.startswith("-") and previous not in PUSH_OPTIONS_WITH_VALUE
+        ]
         refspecs = [arg.partition(":") for arg in repository_and_refspecs[1:]]
         # An empty <src> deletes <dst>, which must stay possible for a badly named branch.
         destinations = [dst.removeprefix("refs/heads/") for src, colon, dst in refspecs if src and colon]
-        return [dst for dst in destinations if not dst.startswith("refs/")]  # a ref outside refs/heads/, such as a tag, is not a branch
+        # A ref outside refs/heads/, such as a tag, is not a branch, and a pattern with * stands for many existing names.
+        return [dst for dst in destinations if not dst.startswith("refs/") and "*" not in dst]
     return option_values(args, CREATE_OPTIONS.get(subcommand, ()))
 
 

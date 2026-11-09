@@ -68,7 +68,7 @@ Checked:
 
 - the new branch of `git checkout -b` or `-B`, `git switch -c`, `-C` or `--create`, and `git worktree add -b` or `-B`
 - the new name of `git branch <name>` with no options, and of `git branch -m` or `-M`
-- the `<dst>` of a `git push` refspec `<src>:<dst>`, the remote branch it creates or updates, with `refs/heads/` stripped; a `<dst>` that does not start with `refs/` is taken as a branch, and a pattern such as `refs/heads/*:refs/heads/*` is checked as the name `*`, so it is blocked
+- the `<dst>` of a `git push` refspec `<src>:<dst>`, the remote branch it creates or updates, with `refs/heads/` stripped; a `<dst>` that does not start with `refs/` is taken as a branch
 - the `<name>` of `gh pr checkout <number> -b <name>` or `--branch <name>`, the local branch it creates
 - each of these after `sudo`, `env` or an environment assignment such as `GIT_TRACE=1`, with git or gh run by full path, such as `/usr/bin/git`, and, for git, after git options such as `-C <path>` or `-c <setting>`
 
@@ -76,7 +76,8 @@ Allowed:
 
 - `git branch -d`, and a `git push` deletion with an empty `<src>`, such as `git push origin :<name>`, so a badly named branch can still be deleted
 - a `git push` without a colon, such as `git push -u origin <name>`, because the local name was checked when the branch was made
-- a `git push` to a ref outside `refs/heads/`, such as a tag `refs/tags/v1.0.0`
+- a `git push` to a ref outside `refs/heads/`, such as a tag `refs/tags/v1.0.0`, or with a pattern refspec whose `<dst>` contains `*`, such as `refs/heads/*:refs/heads/*`, which stands for many existing names
+- the repository of a `git push`, even a URL with a colon such as `git@github.com:<owner>/<repo>.git`, and the value of an option given as the next word, such as `-o ci.skip`, `--push-option`, `--recurse-submodules`, `--receive-pack` or `--exec`: neither is read as a refspec, though the refspecs after them are still checked
 - a plain `gh pr checkout <number>`, which names the local branch after the pull request's own branch, not Claude's choice
 - every other command
 
@@ -85,7 +86,6 @@ Not checked:
 - `--orphan`, and `git branch` with `-f` or `--track`
 - a value joined to its option, such as `--create=<name>`, `-b<name>` or `--branch=<name>`
 - the alias `gh pr co`
-- the refspecs of a `git push` with `--repo=<repository>` or `-o <option>`, which shift which argument is read as the repository, so a refspec can be missed or a repository URL read as one
 - git or gh after options to `sudo` or `env`, such as `sudo -u root git`, or run by another command, such as `bash -c` or `xargs`
 - a command with an unbalanced quote, such as an apostrophe in a heredoc body, which cannot be split into words
 - branches created other than through Bash
