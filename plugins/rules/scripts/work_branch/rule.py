@@ -26,7 +26,12 @@ def off_a_work_branch(directory):
     return f"on {branch}" if branch in SHARED_BRANCHES else None
 
 
+def changed_file(tool_input):
+    """The path of the file a tool call with this input changes."""
+    return tool_input.get("file_path")
+
+
 def main(stdin, stdout, stderr, env_file=None):
     """Read the Claude Code hook's input from stdin and return Claude Code's exit code."""
-    path = Path(json.load(stdin)["tool_input"]["file_path"])
+    path = Path(changed_file(json.load(stdin)["tool_input"]))
     return 2 if off_a_work_branch(path.parent) else 0
