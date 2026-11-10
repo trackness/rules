@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 
-from .rule import main, off_a_work_branch
+from .rule import changed_file, main, off_a_work_branch
 
 # git in the tests reads none of the user's config, global, system or in the environment, such as a global core.hooksPath, and commits as a test identity.
 GIT_ENV = {
@@ -104,6 +104,11 @@ def test_a_repository_git_is_rebasing_by_applying_patches_is_not_off_a_work_bran
     stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", "--apply", "main"], env=GIT_ENV, capture_output=True)
     assert stopped.returncode != 0 and git("-C", repo, "branch", "--show-current") == ""
     assert off_a_work_branch(repo) is None
+
+
+def test_a_notebook_edit_changes_the_file_at_its_notebook_path():
+    """NotebookEdit names its file notebook_path, where Edit and Write say file_path."""
+    assert changed_file({"notebook_path": "/repo/analysis.ipynb", "cell_id": "cell-1", "new_source": "print(1)"}) == "/repo/analysis.ipynb"
 
 
 def test_main_blocks_edit_in_a_repository_on_main(tmp_path):
