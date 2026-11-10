@@ -24,6 +24,14 @@ def repo_on(tmp_path, branch):
     return repo
 
 
+def stop_in_a_rebase(repo):
+    """Leave git rebasing the branch checked out in repo, stopped partway, as at a conflict."""
+    git("-C", repo, "commit", "--allow-empty", "-q", "-m", "feat: continue")
+    # The command false fails once the commit is replayed, which stops the rebase there.
+    stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", "--exec", "false", "HEAD~1"], env=GIT_ENV, capture_output=True)
+    assert stopped.returncode != 0
+
+
 def test_a_repository_on_main_is_off_a_work_branch(tmp_path):
     assert off_a_work_branch(repo_on(tmp_path, "main")) == "on main"
 
@@ -59,19 +67,14 @@ def test_a_repository_with_no_commits_is_not_off_a_work_branch(tmp_path):
 def test_a_repository_git_is_rebasing_is_not_off_a_work_branch(tmp_path):
     """git detaches HEAD while it rebases a branch, and resolving a conflict then means changing files."""
     repo = repo_on(tmp_path, "feature/add-login")
-    git("-C", repo, "commit", "--allow-empty", "-q", "-m", "feat: continue")
-    # The command false fails once the commit is replayed, which stops the rebase there, as a conflict would.
-    stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", "--exec", "false", "HEAD~1"], env=GIT_ENV, capture_output=True)
-    assert stopped.returncode != 0
+    stop_in_a_rebase(repo)
     assert off_a_work_branch(repo) is None
 
 
 def test_a_repository_git_is_rebasing_in_a_directory_with_a_space_in_its_name_is_not_off_a_work_branch(tmp_path):
     (tmp_path / "my projects").mkdir()
     repo = repo_on(tmp_path / "my projects", "feature/add-login")
-    git("-C", repo, "commit", "--allow-empty", "-q", "-m", "feat: continue")
-    stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", "--exec", "false", "HEAD~1"], env=GIT_ENV, capture_output=True)
-    assert stopped.returncode != 0
+    stop_in_a_rebase(repo)
     assert off_a_work_branch(repo) is None
 
 
