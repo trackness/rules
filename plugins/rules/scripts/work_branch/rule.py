@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Allow work only on a branch."""
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -27,9 +28,27 @@ def off_a_work_branch(directory):
     return f"on {branch}" if branch in SHARED_BRANCHES else None
 
 
+def register(env_file):
+    """Make git run this script as the pre-commit hook in the Bash commands of the Claude Code session that owns env_file."""
+    with open(env_file, "a") as session_env:
+        session_env.write(
+            f'export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=hook.work-branch.command GIT_CONFIG_VALUE_0="{Path(__file__).resolve()} pre-commit" '
+            "GIT_CONFIG_KEY_1=hook.work-branch.event GIT_CONFIG_VALUE_1=pre-commit\n"
+        )
+
+
+def pre_commit():
+    """Return git's exit code for the commit it is about to make: 1 rejects the commit."""
+    return 1
+
+
 def main(stdin, stdout, stderr, env_file=None):
     """Read the Claude Code hook's input from stdin and return Claude Code's exit code."""
-    tool_input = json.load(stdin)["tool_input"]
+    hook_input = json.load(stdin)
+    if hook_input.get("hook_event_name") == "SessionStart":
+        register(env_file)
+        return 0
+    tool_input = hook_input["tool_input"]
     path = Path(tool_input.get("file_path") or tool_input["notebook_path"])  # NotebookEdit's name for its file
     # Write makes the directories a new file needs, so git is asked in the nearest one that exists.
     directory = next(parent for parent in path.parents if parent.is_dir())
@@ -46,4 +65,5 @@ def main(stdin, stdout, stderr, env_file=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.stdin, sys.stdout, sys.stderr))
+    # git runs this script as its pre-commit hook with the argument pre-commit; Claude Code runs it with no arguments
+    sys.exit(pre_commit() if sys.argv[1:2] == ["pre-commit"] else main(sys.stdin, sys.stdout, sys.stderr, os.environ.get("CLAUDE_ENV_FILE")))
