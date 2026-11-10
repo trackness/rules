@@ -29,8 +29,12 @@ def off_a_work_branch(directory):
     return f"on {branch}" if branch in SHARED_BRANCHES else None
 
 
-def register(env_file):
+def register(env_file, stdout):
     """Make git run this script as the pre-commit hook in the Bash commands of the Claude Code session that owns env_file."""
+    if not env_file:
+        # Claude Code adds a SessionStart hook's stdout to Claude's context; Claude never sees its stderr.
+        print("The check that commits are made on a branch is not active: Claude Code gave this hook no CLAUDE_ENV_FILE to register it in.", file=stdout)
+        return
     command = f"{shlex.quote(str(Path(__file__).resolve()))} pre-commit"  # git runs the command through a shell
     # The form CONTRIBUTING prescribes: each entry goes after those already counted, so other rules' and the user's GIT_CONFIG_* entries stay,
     # and the command comes before its event, because git ignores a command with no event but aborts on an event with no command.
@@ -60,7 +64,7 @@ def main(stdin, stdout, stderr, env_file=None):
     """Read the Claude Code hook's input from stdin and return Claude Code's exit code."""
     hook_input = json.load(stdin)
     if hook_input.get("hook_event_name") == "SessionStart":
-        register(env_file)
+        register(env_file, stdout)
         return 0
     tool_input = hook_input["tool_input"]
     path = Path(tool_input.get("file_path") or tool_input["notebook_path"])  # NotebookEdit's name for its file
