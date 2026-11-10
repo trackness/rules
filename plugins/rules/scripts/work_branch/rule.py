@@ -19,7 +19,7 @@ def off_a_work_branch(directory):
         return None
     branch = git(directory, "branch", "--show-current").stdout.strip()
     if not branch:
-        # git detaches HEAD while it rebases a branch, and keeps the rebase's state in this directory.
-        rebase_state = git(directory, "rev-parse", "--path-format=absolute", "--git-path", "rebase-merge").stdout.strip()
-        return None if Path(rebase_state).is_dir() else "on a detached HEAD"
+        # git detaches HEAD while it rebases a branch, and keeps the rebase's state in one of these two directories.
+        rebase_state = git(directory, "rev-parse", "--path-format=absolute", "--git-path", "rebase-merge", "--git-path", "rebase-apply").stdout.split()
+        return None if any(Path(path).is_dir() for path in rebase_state) else "on a detached HEAD"
     return f"on {branch}" if branch in SHARED_BRANCHES else None
