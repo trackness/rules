@@ -66,6 +66,15 @@ def test_a_repository_git_is_rebasing_is_not_off_a_work_branch(tmp_path):
     assert off_a_work_branch(repo) is None
 
 
+def test_a_repository_git_is_rebasing_in_a_directory_with_a_space_in_its_name_is_not_off_a_work_branch(tmp_path):
+    (tmp_path / "my projects").mkdir()
+    repo = repo_on(tmp_path / "my projects", "feature/add-login")
+    git("-C", repo, "commit", "--allow-empty", "-q", "-m", "feat: continue")
+    stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", "--exec", "false", "HEAD~1"], env=GIT_ENV, capture_output=True)
+    assert stopped.returncode != 0
+    assert off_a_work_branch(repo) is None
+
+
 def test_a_repository_git_is_rebasing_by_applying_patches_is_not_off_a_work_branch(tmp_path):
     """git rebase --apply keeps the rebase's state in another directory than a rebase without it."""
     repo = repo_on(tmp_path, "main")
