@@ -23,3 +23,7 @@ def off_a_work_branch(directory):
         rebase_state = git(directory, "rev-parse", "--path-format=absolute", "--git-path", "rebase-merge", "--git-path", "rebase-apply").stdout.splitlines()
         return None if any(Path(path).is_dir() for path in rebase_state) else "on a detached HEAD"
     return f"on {branch}" if branch in SHARED_BRANCHES else None
+
+
+def main(stdin, stdout, stderr, env_file=None):
+    """Read the Claude Code hook's input from stdin and return Claude Code's exit code."""

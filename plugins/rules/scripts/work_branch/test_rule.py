@@ -1,8 +1,10 @@
 """Tests for "Work only on a branch". Run from the repo root: uv run pytest"""
+import io
+import json
 import os
 import subprocess
 
-from .rule import off_a_work_branch
+from .rule import main, off_a_work_branch
 
 # git in the tests reads none of the user's config, global, system or in the environment, such as a global core.hooksPath, and commits as a test identity.
 GIT_ENV = {
@@ -30,6 +32,12 @@ def stop_in_a_rebase(repo):
     # The command false fails once the commit is replayed, which stops the rebase there.
     stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", "--exec", "false", "HEAD~1"], env=GIT_ENV, capture_output=True)
     assert stopped.returncode != 0
+
+
+def tool_call(file_path):
+    """An Edit tool call as Claude Code sends it to the hook on stdin."""
+    tool_input = {"file_path": str(file_path), "old_string": "old text", "new_string": "new text"}
+    return io.StringIO(json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Edit", "tool_input": tool_input}))
 
 
 def test_a_repository_on_main_is_off_a_work_branch(tmp_path):
@@ -96,3 +104,8 @@ def test_a_repository_git_is_rebasing_by_applying_patches_is_not_off_a_work_bran
     stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", "--apply", "main"], env=GIT_ENV, capture_output=True)
     assert stopped.returncode != 0 and git("-C", repo, "branch", "--show-current") == ""
     assert off_a_work_branch(repo) is None
+
+
+def test_main_blocks_edit_in_a_repository_on_main(tmp_path):
+    repo = repo_on(tmp_path, "main")
+    assert main(tool_call(repo / "notes.md"), io.StringIO(), io.StringIO()) == 2
