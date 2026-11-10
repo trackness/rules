@@ -36,6 +36,12 @@ def test_a_repository_on_develop_is_off_a_work_branch(tmp_path):
     assert off_a_work_branch(repo_on(tmp_path, "develop")) == "on develop"
 
 
+def test_a_repository_on_a_detached_head_is_off_a_work_branch(tmp_path):
+    repo = repo_on(tmp_path, "feature/add-login")
+    git("-C", repo, "switch", "-q", "--detach")
+    assert off_a_work_branch(repo) == "on a detached HEAD"
+
+
 def test_a_directory_outside_any_repository_is_not_off_a_work_branch(tmp_path):
     assert off_a_work_branch(tmp_path) is None
 
