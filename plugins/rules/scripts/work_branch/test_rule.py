@@ -127,3 +127,12 @@ def test_the_script_run_as_a_hook_blocks_an_edit_in_a_repository_on_main(tmp_pat
     repo = repo_on(tmp_path, "main")
     result = subprocess.run([SCRIPT], input=tool_call(repo / "notes.md").getvalue(), capture_output=True, text=True)
     assert result.returncode == 2
+
+
+def test_the_script_run_as_a_hook_blocks_a_notebook_edit_in_a_repository_on_main(tmp_path):
+    """NotebookEdit names its file notebook_path, where Edit and Write say file_path."""
+    repo = repo_on(tmp_path, "main")
+    tool_input = {"notebook_path": str(repo / "analysis.ipynb"), "cell_id": "cell-1", "new_source": "print(1)"}
+    notebook_edit = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "NotebookEdit", "tool_input": tool_input})
+    result = subprocess.run([SCRIPT], input=notebook_edit, capture_output=True, text=True)
+    assert result.returncode == 2
