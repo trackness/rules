@@ -37,8 +37,13 @@ def register(env_file):
         )
 
 
-def pre_commit():
-    """Return git's exit code for the commit it is about to make: 1 rejects the commit."""
+def pre_commit(stderr):
+    """Return git's exit code for the commit it is about to make: 1 rejects the commit, with a reason on stderr."""
+    print(
+        "Rejected: work happens only on a branch, and this repository is on main, so nothing was committed. "
+        "Create a branch with git switch -c <type>/<description>, which keeps the changes, and commit there.",
+        file=stderr,
+    )
     return 1
 
 
@@ -66,4 +71,4 @@ def main(stdin, stdout, stderr, env_file=None):
 
 if __name__ == "__main__":
     # git runs this script as its pre-commit hook with the argument pre-commit; Claude Code runs it with no arguments
-    sys.exit(pre_commit() if sys.argv[1:2] == ["pre-commit"] else main(sys.stdin, sys.stdout, sys.stderr, os.environ.get("CLAUDE_ENV_FILE")))
+    sys.exit(pre_commit(sys.stderr) if sys.argv[1:2] == ["pre-commit"] else main(sys.stdin, sys.stdout, sys.stderr, os.environ.get("CLAUDE_ENV_FILE")))
