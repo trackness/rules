@@ -64,3 +64,23 @@ def test_a_repository_git_is_rebasing_is_not_off_a_work_branch(tmp_path):
     stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", "--exec", "false", "HEAD~1"], env=GIT_ENV, capture_output=True)
     assert stopped.returncode != 0
     assert off_a_work_branch(repo) is None
+
+
+def test_a_repository_git_is_rebasing_by_applying_patches_is_not_off_a_work_branch(tmp_path):
+    """git rebase --apply keeps the rebase's state in another directory than a rebase without it."""
+    repo = repo_on(tmp_path, "main")
+
+    def commit_notes(text):
+        (repo / "notes.txt").write_text(text)
+        git("-C", repo, "add", "notes.txt")
+        git("-C", repo, "commit", "-q", "-m", "feat: add notes")
+
+    git("-C", repo, "switch", "-q", "-c", "feature/add-login")
+    commit_notes("login\n")
+    git("-C", repo, "switch", "-q", "main")
+    commit_notes("logout\n")
+    git("-C", repo, "switch", "-q", "feature/add-login")
+    # Both branches add notes.txt with different text, so the rebase stops at the conflict.
+    stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", "--apply", "main"], env=GIT_ENV, capture_output=True)
+    assert stopped.returncode != 0 and git("-C", repo, "branch", "--show-current") == ""
+    assert off_a_work_branch(repo) is None
