@@ -109,3 +109,11 @@ def test_a_repository_git_is_rebasing_by_applying_patches_is_not_off_a_work_bran
 def test_main_blocks_edit_in_a_repository_on_main(tmp_path):
     repo = repo_on(tmp_path, "main")
     assert main(tool_call(repo / "notes.md"), io.StringIO(), io.StringIO()) == 2
+
+
+def test_main_allows_edit_in_a_worktree_on_a_work_branch_while_the_session_is_in_a_checkout_on_main(tmp_path, monkeypatch):
+    """The hook goes by the checkout that holds the file, not by the session's working directory."""
+    repo = repo_on(tmp_path, "main")
+    git("-C", repo, "worktree", "add", "-q", "-b", "feature/add-login", tmp_path / "worktree")
+    monkeypatch.chdir(repo)
+    assert main(tool_call(tmp_path / "worktree" / "notes.md"), io.StringIO(), io.StringIO()) == 0
