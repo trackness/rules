@@ -2,6 +2,7 @@
 """Allow work only on a branch."""
 import json
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -35,9 +36,10 @@ def changed_file(tool_input):
 
 def register(env_file):
     """Make git run this script as the pre-commit hook in the Bash commands of the Claude Code session that owns env_file."""
+    command = f"{shlex.quote(str(Path(__file__).resolve()))} pre-commit"  # git runs the command through a shell
     with open(env_file, "a") as session_env:
         session_env.write(
-            f'export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=hook.work-branch.command GIT_CONFIG_VALUE_0="{Path(__file__).resolve()} pre-commit" '
+            f"export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=hook.work-branch.command GIT_CONFIG_VALUE_0={shlex.quote(command)} "
             "GIT_CONFIG_KEY_1=hook.work-branch.event GIT_CONFIG_VALUE_1=pre-commit\n"
         )
 
