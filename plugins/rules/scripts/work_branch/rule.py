@@ -29,7 +29,8 @@ def off_a_work_branch(directory):
 
 def main(stdin, stdout, stderr, env_file=None):
     """Read the Claude Code hook's input from stdin and return Claude Code's exit code."""
-    path = Path(json.load(stdin)["tool_input"]["file_path"])
+    tool_input = json.load(stdin)["tool_input"]
+    path = Path(tool_input.get("file_path") or tool_input["notebook_path"])  # NotebookEdit's name for its file
     return 2 if off_a_work_branch(path.parent) else 0
 
 
