@@ -114,6 +114,16 @@ def test_main_blocks_edit_in_a_repository_on_main(tmp_path):
     assert main(tool_call(repo / "notes.md"), io.StringIO(), io.StringIO()) == 2
 
 
+def test_main_tells_claude_why_an_edit_in_a_repository_on_main_is_blocked(tmp_path):
+    repo = repo_on(tmp_path, "main")
+    stderr = io.StringIO()
+    main(tool_call(repo / "notes.md"), io.StringIO(), stderr)
+    assert stderr.getvalue() == (
+        "Blocked: work happens only on a branch, and this file's repository is on main. "
+        "Create a branch with git switch -c <type>/<description>, then make the change there.\n"
+    )
+
+
 def test_main_blocks_new_file_in_a_directory_that_does_not_exist_yet(tmp_path):
     """Write makes the directories a new file needs, so the file's own directory may not exist when the hook runs."""
     repo = repo_on(tmp_path, "main")
