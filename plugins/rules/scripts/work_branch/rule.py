@@ -34,4 +34,6 @@ def changed_file(tool_input):
 def main(stdin, stdout, stderr, env_file=None):
     """Read the Claude Code hook's input from stdin and return Claude Code's exit code."""
     path = Path(changed_file(json.load(stdin)["tool_input"]))
-    return 2 if off_a_work_branch(path.parent) else 0
+    # Write makes the directories a new file needs, so git is asked in the nearest one that exists.
+    directory = next(parent for parent in path.parents if parent.is_dir())
+    return 2 if off_a_work_branch(directory) else 0
