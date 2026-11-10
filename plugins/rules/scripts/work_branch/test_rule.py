@@ -46,7 +46,8 @@ def start_session(env_file):
     """Run the script as Claude Code's SessionStart hook does, with env_file as its CLAUDE_ENV_FILE, and return env_file."""
     env_file.touch()  # Claude Code hands the hook an existing file to append to
     hook_input = json.dumps({"hook_event_name": "SessionStart", "source": "startup"})
-    subprocess.run([SCRIPT], input=hook_input, env={**os.environ, "CLAUDE_ENV_FILE": str(env_file)}, capture_output=True, text=True)
+    result = subprocess.run([SCRIPT], input=hook_input, env={**os.environ, "CLAUDE_ENV_FILE": str(env_file)}, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
     return env_file
 
 
