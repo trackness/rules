@@ -8,6 +8,9 @@ SHARED_BRANCHES = ("main", "master", "develop")
 
 def off_a_work_branch(directory):
     """Where the repository holding directory is checked out when that is not a work branch, such as "on main"."""
-    # Outside a repository git fails and names no branch.
-    branch = subprocess.run(["git", "-C", directory, "branch", "--show-current"], capture_output=True, text=True).stdout.strip()
+    # Outside a repository git fails and names no branch; on a detached HEAD it succeeds and names none.
+    head = subprocess.run(["git", "-C", directory, "branch", "--show-current"], capture_output=True, text=True)
+    branch = head.stdout.strip()
+    if head.returncode == 0 and not branch:
+        return "on a detached HEAD"
     return f"on {branch}" if branch in SHARED_BRANCHES else None
