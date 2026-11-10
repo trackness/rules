@@ -27,3 +27,4 @@ def off_a_work_branch(directory):
 
 def main(stdin, stdout, stderr, env_file=None):
     """Read the Claude Code hook's input from stdin and return Claude Code's exit code."""
+    return 2
