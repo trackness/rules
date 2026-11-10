@@ -32,10 +32,14 @@ def off_a_work_branch(directory):
 def register(env_file):
     """Make git run this script as the pre-commit hook in the Bash commands of the Claude Code session that owns env_file."""
     command = f"{shlex.quote(str(Path(__file__).resolve()))} pre-commit"  # git runs the command through a shell
+    # The form CONTRIBUTING prescribes: each entry goes after those already counted, so other rules' and the user's GIT_CONFIG_* entries stay,
+    # and the command comes before its event, because git ignores a command with no event but aborts on an event with no command.
     with open(env_file, "a") as session_env:
         session_env.write(
-            f"export GIT_CONFIG_COUNT=2 GIT_CONFIG_KEY_0=hook.work-branch.command GIT_CONFIG_VALUE_0={shlex.quote(command)} "
-            "GIT_CONFIG_KEY_1=hook.work-branch.event GIT_CONFIG_VALUE_1=pre-commit\n"
+            f"export GIT_CONFIG_KEY_${{GIT_CONFIG_COUNT:-0}}=hook.work-branch.command GIT_CONFIG_VALUE_${{GIT_CONFIG_COUNT:-0}}={shlex.quote(command)}\n"
+            "export GIT_CONFIG_COUNT=$((${GIT_CONFIG_COUNT:-0} + 1))\n"
+            "export GIT_CONFIG_KEY_${GIT_CONFIG_COUNT}=hook.work-branch.event GIT_CONFIG_VALUE_${GIT_CONFIG_COUNT}=pre-commit\n"
+            "export GIT_CONFIG_COUNT=$((GIT_CONFIG_COUNT + 1))\n"
         )
 
 
