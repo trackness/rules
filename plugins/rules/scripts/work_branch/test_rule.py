@@ -3,6 +3,7 @@ import io
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,6 +15,10 @@ from .rule import changed_file, main, off_a_work_branch
 GIT_VERSION = tuple(int(part) for part in re.findall(r"\d+", subprocess.run(["git", "--version"], capture_output=True, text=True).stdout)[:3])
 needs_config_hooks = pytest.mark.skipif(GIT_VERSION < (2, 54, 0), reason="git runs hooks defined in config from 2.54.0")
 SCRIPT = Path(__file__).resolve().parent / "rule.py"
+COMMIT_MESSAGE_RULE = SCRIPT.parent.parent / "commit_message" / "rule.py"
+BRANCH_NAME_RULE = SCRIPT.parent.parent / "branch_name" / "rule.py"
+# Git config the session's environment already holds, such as the user's own.
+EXISTING_GIT_CONFIG = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "test.kept", "GIT_CONFIG_VALUE_0": "yes"}
 
 # git in the tests reads none of the user's config, global, system or in the environment, such as a global core.hooksPath, and commits as a test identity.
 GIT_ENV = {
@@ -227,3 +232,20 @@ def test_registered_hook_runs_from_a_path_with_spaces_and_quotes(tmp_path):
     repo = repo_on(tmp_path, "main")
     result = git_in_session(tmp_path, repo, "commit", "--allow-empty", "-q", "-m", "feat: continue", script=script)
     assert result.returncode != 0 and result.stderr.startswith("Rejected: work happens only on a branch")
+
+
+def test_all_git_rules_register_beside_git_config_already_in_the_session(tmp_path):
+    """Claude Code runs each rule's SessionStart hook with its own env file, and sources the files one after another in every Bash command."""
+    env_files = [start_session(tmp_path / f"{rule.parent.name}.env", rule) for rule in (COMMIT_MESSAGE_RULE, BRANCH_NAME_RULE, SCRIPT)]
+    result = subprocess.run(
+        ["bash", "-c", '. "$1" && . "$2" && . "$3" && git config --list --show-scope', "_", *env_files], env={**GIT_ENV, **EXISTING_GIT_CONFIG}, capture_output=True, text=True
+    )
+    assert sorted(line for line in result.stdout.splitlines() if line.startswith("command\t")) == sorted([
+        "command\ttest.kept=yes",
+        "command\thook.conventional-commits.event=commit-msg",
+        f"command\thook.conventional-commits.command={shlex.quote(str(COMMIT_MESSAGE_RULE))}",
+        "command\thook.conventional-branch.event=pre-push",
+        f"command\thook.conventional-branch.command={shlex.quote(str(BRANCH_NAME_RULE))} pre-push",
+        "command\thook.work-branch.event=pre-commit",
+        f"command\thook.work-branch.command={shlex.quote(str(SCRIPT))} pre-commit",
+    ])
