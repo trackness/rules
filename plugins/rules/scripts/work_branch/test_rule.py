@@ -120,6 +120,13 @@ def test_main_blocks_new_file_in_a_directory_that_does_not_exist_yet(tmp_path):
     assert main(tool_call(repo / "docs" / "guide" / "notes.md"), io.StringIO(), io.StringIO()) == 2
 
 
+def test_main_allows_edit_of_a_file_git_ignores_in_a_repository_on_main(tmp_path):
+    """A file git ignores, such as Claude Code's local settings, is on no branch."""
+    repo = repo_on(tmp_path, "main")
+    (repo / ".gitignore").write_text(".claude/settings.local.json\n")
+    assert main(tool_call(repo / ".claude" / "settings.local.json"), io.StringIO(), io.StringIO()) == 0
+
+
 def test_main_allows_edit_in_a_worktree_on_a_work_branch_while_the_session_is_in_a_checkout_on_main(tmp_path, monkeypatch):
     """The hook goes by the checkout that holds the file, not by the session's working directory."""
     repo = repo_on(tmp_path, "main")
