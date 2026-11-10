@@ -114,6 +114,12 @@ def test_main_blocks_edit_in_a_repository_on_main(tmp_path):
     assert main(tool_call(repo / "notes.md"), io.StringIO(), io.StringIO()) == 2
 
 
+def test_main_blocks_new_file_in_a_directory_that_does_not_exist_yet(tmp_path):
+    """Write makes the directories a new file needs, so the file's own directory may not exist when the hook runs."""
+    repo = repo_on(tmp_path, "main")
+    assert main(tool_call(repo / "docs" / "guide" / "notes.md"), io.StringIO(), io.StringIO()) == 2
+
+
 def test_main_allows_edit_in_a_worktree_on_a_work_branch_while_the_session_is_in_a_checkout_on_main(tmp_path, monkeypatch):
     """The hook goes by the checkout that holds the file, not by the session's working directory."""
     repo = repo_on(tmp_path, "main")
