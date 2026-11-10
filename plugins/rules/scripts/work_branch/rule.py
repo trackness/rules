@@ -36,6 +36,11 @@ def main(stdin, stdout, stderr, env_file=None):
     # A file git ignores is on no branch; check-ignore exits 0 for one.
     if not off_a_work_branch(directory) or git(directory, "check-ignore", "-q", path).returncode == 0:
         return 0
+    print(
+        "Blocked: work happens only on a branch, and this file's repository is on main. "
+        "Create a branch with git switch -c <type>/<description>, then make the change there.",
+        file=stderr,
+    )
     return 2
 
 
