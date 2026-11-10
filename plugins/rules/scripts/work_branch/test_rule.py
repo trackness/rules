@@ -54,3 +54,13 @@ def test_a_repository_with_no_commits_is_not_off_a_work_branch(tmp_path):
     """A new repository has no main to branch from yet, so its first commit is made on main."""
     git("init", "-q", "-b", "main", tmp_path / "repo")
     assert off_a_work_branch(tmp_path / "repo") is None
+
+
+def test_a_repository_git_is_rebasing_is_not_off_a_work_branch(tmp_path):
+    """git detaches HEAD while it rebases a branch, and resolving a conflict then means changing files."""
+    repo = repo_on(tmp_path, "feature/add-login")
+    git("-C", repo, "commit", "--allow-empty", "-q", "-m", "feat: continue")
+    # The command false fails once the commit is replayed, which stops the rebase there, as a conflict would.
+    stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", "--exec", "false", "HEAD~1"], env=GIT_ENV, capture_output=True)
+    assert stopped.returncode != 0
+    assert off_a_work_branch(repo) is None
