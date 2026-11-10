@@ -34,8 +34,12 @@ def changed_file(tool_input):
     return tool_input.get("file_path") or tool_input.get("notebook_path")  # NotebookEdit's name for its file
 
 
-def register(env_file):
+def register(env_file, stdout):
     """Make git run this script as the pre-commit hook in the Bash commands of the Claude Code session that owns env_file."""
+    if not env_file:
+        # Claude Code adds a SessionStart hook's stdout to Claude's context; Claude never sees its stderr.
+        print("The check that commits are made on a branch is not active: Claude Code gave this hook no CLAUDE_ENV_FILE to register it in.", file=stdout)
+        return
     command = f"{shlex.quote(str(Path(__file__).resolve()))} pre-commit"  # git runs the command through a shell
     # Each entry goes after those already counted, so other rules' and the user's GIT_CONFIG_* entries stay. The command comes first:
     # git ignores a command with no event, but aborts on an event with no command, as a shell that stops partway through would leave.
@@ -65,7 +69,7 @@ def main(stdin, stdout, stderr, env_file=None):
     """Read the Claude Code hook's input from stdin and return Claude Code's exit code."""
     hook_input = json.load(stdin)
     if hook_input.get("hook_event_name") == "SessionStart":
-        register(env_file)
+        register(env_file, stdout)
         return 0
     path = Path(changed_file(hook_input["tool_input"]))
     # Write makes the directories a new file needs, so git is asked in the nearest one that exists.
