@@ -2,6 +2,7 @@
 """Allow work only on a branch."""
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 # shortcut: a shared branch with another name, such as trunk, is not kept free of work; read the remote's HEAD if a repository uses one
@@ -46,3 +47,7 @@ def main(stdin, stdout, stderr, env_file=None):
         file=stderr,
     )
     return 2
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.stdin, sys.stdout, sys.stderr))
