@@ -3,6 +3,7 @@ import io
 import json
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -42,18 +43,18 @@ def stop_in_a_rebase(repo):
     assert stopped.returncode != 0
 
 
-def start_session(env_file):
+def start_session(env_file, script=SCRIPT):
     """Run the script as Claude Code's SessionStart hook does, with env_file as its CLAUDE_ENV_FILE, and return env_file."""
     env_file.touch()  # Claude Code hands the hook an existing file to append to
     hook_input = json.dumps({"hook_event_name": "SessionStart", "source": "startup"})
-    result = subprocess.run([SCRIPT], input=hook_input, env={**os.environ, "CLAUDE_ENV_FILE": str(env_file)}, capture_output=True, text=True)
+    result = subprocess.run([script], input=hook_input, env={**os.environ, "CLAUDE_ENV_FILE": str(env_file)}, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     return env_file
 
 
-def git_in_session(tmp_path, repo, *args):
+def git_in_session(tmp_path, repo, *args, script=SCRIPT):
     """Start a session, then run git in repo with the given arguments as Claude's Bash tool would, with the env file sourced."""
-    session_env = start_session(tmp_path / "session.env")
+    session_env = start_session(tmp_path / "session.env", script)
     command = ["bash", "-c", '. "$1" && shift && "$@"', "_", session_env, "git", "-C", repo, *args]
     return subprocess.run([str(word) for word in command], env=GIT_ENV, capture_output=True, text=True)
 
@@ -225,3 +226,14 @@ def test_registered_hook_accepts_commit_on_a_work_branch(tmp_path):
     repo = repo_on(tmp_path, "feature/add-login")
     result = git_in_session(tmp_path, repo, "commit", "--allow-empty", "-q", "-m", "feat: continue")
     assert result.returncode == 0 and commits(repo) == 2
+
+
+@needs_config_hooks
+def test_registered_hook_runs_from_a_path_with_spaces_and_quotes(tmp_path):
+    """The plugin can be installed under such a path; the session's shell must still parse the env file, and git still run the script."""
+    script = tmp_path / "it's a \"plugin\"" / "rule.py"
+    script.parent.mkdir()
+    shutil.copy(SCRIPT, script)
+    repo = repo_on(tmp_path, "main")
+    result = git_in_session(tmp_path, repo, "commit", "--allow-empty", "-q", "-m", "feat: continue", script=script)
+    assert result.stderr.startswith("Rejected: work happens only on a branch")
