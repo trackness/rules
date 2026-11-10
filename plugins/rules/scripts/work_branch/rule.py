@@ -2,6 +2,7 @@
 """Allow work only on a branch."""
 import json
 import subprocess
+import sys
 from pathlib import Path
 
 # shortcut: a shared branch with another name, such as trunk, is not kept free of work; read the remote's HEAD if a repository uses one
@@ -30,3 +31,7 @@ def main(stdin, stdout, stderr, env_file=None):
     """Read the Claude Code hook's input from stdin and return Claude Code's exit code."""
     path = Path(json.load(stdin)["tool_input"]["file_path"])
     return 2 if off_a_work_branch(path.parent) else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.stdin, sys.stdout, sys.stderr))
