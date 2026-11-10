@@ -33,7 +33,10 @@ def main(stdin, stdout, stderr, env_file=None):
     path = Path(tool_input.get("file_path") or tool_input["notebook_path"])  # NotebookEdit's name for its file
     # Write makes the directories a new file needs, so git is asked in the nearest one that exists.
     directory = next(parent for parent in path.parents if parent.is_dir())
-    return 2 if off_a_work_branch(directory) else 0
+    # A file git ignores is on no branch; check-ignore exits 0 for one.
+    if not off_a_work_branch(directory) or git(directory, "check-ignore", "-q", path).returncode == 0:
+        return 0
+    return 2
 
 
 if __name__ == "__main__":
