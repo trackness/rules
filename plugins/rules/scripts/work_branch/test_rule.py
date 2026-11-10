@@ -3,8 +3,11 @@ import io
 import json
 import os
 import subprocess
+from pathlib import Path
 
 from .rule import changed_file, main, off_a_work_branch
+
+SCRIPT = Path(__file__).resolve().parent / "rule.py"
 
 # git in the tests reads none of the user's config, global, system or in the environment, such as a global core.hooksPath, and commits as a test identity.
 GIT_ENV = {
@@ -153,3 +156,10 @@ def test_main_allows_edit_in_a_worktree_on_a_work_branch_while_the_session_is_in
     git("-C", repo, "worktree", "add", "-q", "-b", "feature/add-login", tmp_path / "worktree")
     monkeypatch.chdir(repo)
     assert main(tool_call(tmp_path / "worktree" / "notes.md"), io.StringIO(), io.StringIO()) == 0
+
+
+def test_the_script_blocks_an_edit_as_claude_code_runs_it(tmp_path):
+    """Claude Code passes the tool call on stdin, and takes exit code 2 with a reason on stderr as a block."""
+    repo = repo_on(tmp_path, "main")
+    result = subprocess.run([SCRIPT], input=tool_call(repo / "notes.md").getvalue(), capture_output=True, text=True)
+    assert result.returncode == 2 and result.stderr.startswith("Blocked: ")
