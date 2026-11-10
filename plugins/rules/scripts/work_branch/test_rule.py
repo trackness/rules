@@ -28,6 +28,10 @@ def test_a_repository_on_main_is_off_a_work_branch(tmp_path):
     assert off_a_work_branch(repo_on(tmp_path, "main")) == "on main"
 
 
+def test_a_repository_on_master_is_off_a_work_branch(tmp_path):
+    assert off_a_work_branch(repo_on(tmp_path, "master")) == "on master"
+
+
 def test_a_directory_outside_any_repository_is_not_off_a_work_branch(tmp_path):
     assert off_a_work_branch(tmp_path) is None
 
