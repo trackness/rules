@@ -210,3 +210,11 @@ def test_registered_hook_tells_claude_why_a_commit_in_a_repository_on_main_is_re
         "Rejected: work happens only on a branch, and this repository is on main, so nothing was committed. "
         "Create a branch with git switch -c <type>/<description>, which keeps the changes, and commit there.\n"
     )
+
+
+@needs_config_hooks
+def test_registered_hook_tells_claude_when_the_repository_is_on_a_detached_head(tmp_path):
+    repo = repo_on(tmp_path, "feature/add-login")
+    git("-C", repo, "switch", "-q", "--detach")
+    result = git_in_session(tmp_path, repo, "commit", "--allow-empty", "-q", "-m", "feat: continue")
+    assert "this repository is on a detached HEAD," in result.stderr
