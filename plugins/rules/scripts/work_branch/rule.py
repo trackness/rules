@@ -28,7 +28,7 @@ def off_a_work_branch(directory):
 
 def changed_file(tool_input):
     """The path of the file a tool call with this input changes."""
-    return tool_input.get("file_path")
+    return tool_input.get("file_path") or tool_input.get("notebook_path")  # NotebookEdit's name for its file
 
 
 def main(stdin, stdout, stderr, env_file=None):
