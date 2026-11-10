@@ -259,3 +259,13 @@ def test_all_git_rules_register_beside_git_config_already_in_the_session(tmp_pat
         "command\thook.work-branch.event=pre-commit",
         f"command\thook.work-branch.command={shlex.quote(str(SCRIPT))} pre-commit",
     ])
+
+
+def test_session_start_without_an_env_file_tells_claude_the_commit_check_is_not_active():
+    """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook.
+
+    Claude Code adds a SessionStart hook's stdout at exit 0 to Claude's context; Claude never sees its stderr.
+    """
+    env = {name: value for name, value in os.environ.items() if name != "CLAUDE_ENV_FILE"}
+    result = subprocess.run([SCRIPT], input=json.dumps({"hook_event_name": "SessionStart", "source": "startup"}), env=env, capture_output=True, text=True)
+    assert result.returncode == 0 and "not active" in result.stdout
