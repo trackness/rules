@@ -30,3 +30,7 @@ def test_a_repository_on_main_is_off_a_work_branch(tmp_path):
 
 def test_a_directory_outside_any_repository_is_not_off_a_work_branch(tmp_path):
     assert off_a_work_branch(tmp_path) is None
+
+
+def test_a_repository_on_a_work_branch_is_not_off_a_work_branch(tmp_path):
+    assert off_a_work_branch(repo_on(tmp_path, "feature/add-login")) is None
