@@ -36,11 +36,12 @@ def main(stdin, stdout, stderr, env_file=None):
     path = Path(changed_file(json.load(stdin)["tool_input"]))
     # Write makes the directories a new file needs, so git is asked in the nearest one that exists.
     directory = next(parent for parent in path.parents if parent.is_dir())
+    where = off_a_work_branch(directory)
     # A file git ignores is on no branch; check-ignore exits 0 for one.
-    if not off_a_work_branch(directory) or git(directory, "check-ignore", "-q", path).returncode == 0:
+    if not where or git(directory, "check-ignore", "-q", path).returncode == 0:
         return 0
     print(
-        "Blocked: work happens only on a branch, and this file's repository is on main. "
+        f"Blocked: work happens only on a branch, and this file's repository is {where}. "
         "Create a branch with git switch -c <type>/<description>, then make the change there.",
         file=stderr,
     )
