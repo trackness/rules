@@ -126,6 +126,14 @@ def test_main_block_says_the_repository_is_on_main_and_how_to_get_on_a_branch(tm
     )
 
 
+def test_main_block_says_the_repository_is_on_a_detached_head(tmp_path):
+    repo = repo_on(tmp_path, "feature/add-login")
+    git("-C", repo, "switch", "-q", "--detach")
+    stderr = io.StringIO()
+    main(tool_call(repo / "notes.md"), io.StringIO(), stderr)
+    assert "this file's repository is on a detached HEAD." in stderr.getvalue()
+
+
 def test_main_blocks_new_file_in_a_directory_that_does_not_exist_yet(tmp_path):
     """Write makes the directories a new file needs, so the file's own directory may not exist when the hook runs."""
     repo = repo_on(tmp_path, "main")
