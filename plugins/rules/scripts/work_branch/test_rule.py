@@ -208,3 +208,10 @@ def test_registered_hook_rejects_commit_on_a_detached_head_and_says_so(tmp_path)
     git("-C", repo, "switch", "-q", "--detach")
     result = git_in_session(tmp_path, repo, "commit", "--allow-empty", "-q", "-m", "feat: continue")
     assert result.returncode != 0 and "this repository is on a detached HEAD," in result.stderr
+
+
+@needs_config_hooks
+def test_registered_hook_accepts_commit_on_a_work_branch(tmp_path):
+    repo = repo_on(tmp_path, "feature/add-login")
+    result = git_in_session(tmp_path, repo, "commit", "--allow-empty", "-q", "-m", "feat: continue")
+    assert result.returncode == 0 and commits(repo) == 2, result.stderr
