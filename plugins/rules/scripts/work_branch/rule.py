@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Allow work only on a branch."""
+"""Allow work only on a branch: a PreToolUse hook for the files Claude changes, and git's pre-commit hook for the commits Claude makes."""
 import json
 import os
 import shlex
@@ -61,7 +61,12 @@ def pre_commit(stderr):
 
 
 def main(stdin, stdout, stderr, env_file=None):
-    """Read the Claude Code hook's input from stdin and return Claude Code's exit code."""
+    """Read the Claude Code hook's input from stdin and return Claude Code's exit code.
+
+    At SessionStart, register this script as git's pre-commit hook in env_file.
+    A tool call that changes a file in a repository that is not on a work branch gets a reason on stderr and 2, which blocks it;
+    anything else gets 0.
+    """
     hook_input = json.load(stdin)
     if hook_input.get("hook_event_name") == "SessionStart":
         register(env_file, stdout)
