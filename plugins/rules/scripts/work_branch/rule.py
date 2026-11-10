@@ -39,8 +39,9 @@ def register(env_file):
 
 def pre_commit(stderr):
     """Return git's exit code for the commit it is about to make: 1 rejects the commit, with a reason on stderr."""
+    where = off_a_work_branch(".")  # git runs a pre-commit hook at the top of the working tree
     print(
-        "Rejected: work happens only on a branch, and this repository is on main, so nothing was committed. "
+        f"Rejected: work happens only on a branch, and this repository is {where}, so nothing was committed. "
         "Create a branch with git switch -c <type>/<description>, which keeps the changes, and commit there.",
         file=stderr,
     )
