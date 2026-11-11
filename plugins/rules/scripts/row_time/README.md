@@ -36,8 +36,10 @@ Each time read is kept in a file beside the transcript, under the transcript's n
 
 The mod hooks `classic.SessionStart` for the transcript's path, `session.append` to draw the rows again, and `ui.render` to draw each row. It reads a transcript with `tail`, because a mod's own file read refuses a file over 4 MiB, which a transcript passes; so it needs `tail` on the `PATH`. A subagent's transcript is looked for in the `subagents` folder that Claude Code keeps beside the session's transcript, under the session's id.
 
-## Known limits
+## Future improvements
 
-Built and run against Claude Code 2.1.322.
+Built and run against Claude Code 2.1.322. What the mod does not yet do right:
 
-- In the ctrl+o view, Claude Code draws its own time and model on a line above each reply, in place of the blank line it draws there in the normal view, and tells a mod nothing of it. The reply's time then lands one line below its `⏺`.
+- **A reply in the ctrl+o view.** Claude Code draws its own time and model on a line above each reply there, in place of the blank line it draws in the normal view, and tells a mod nothing of it, so the reply's time lands one line below its `⏺`. Claude Code's code draws the same line above a reply in the normal view while its `showMessageTimestamps` setting is on.
+- **A run of tool calls drawn unfolded.** Under `--verbose`, and in the ctrl+o view of the non-fullscreen screen, Claude Code draws a run's calls as rows of their own inside the run. The run and its first call then each carry a time, two on one line.
+- **Reading only what is new.** A row whose time is not yet kept is looked for in the whole transcript, and then in every subagent's transcript, each time the row is drawn. Reading only what a transcript has gained since the last read would cost less in a long session.
