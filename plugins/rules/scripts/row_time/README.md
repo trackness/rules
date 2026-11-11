@@ -21,6 +21,8 @@ The time is the timestamp Claude Code records for the row in the session's trans
 
 Claude Code draws a row a moment before it writes the row to the transcript. Until the transcript has the row's time, the row shows `--:--`. The mod draws the rows again 100 ms after each row joins the conversation, which fills the time in where the row stands; a row the transcript still lacks then is filled in at a later redraw.
 
+Claude Code draws a resumed session's rows before it tells a mod where the transcript is. The mod draws them again as soon as it knows, so they carry their times from the start.
+
 ## The times file
 
 The time of each row drawn is kept in a file beside the transcript, under the transcript's name with `.times` in place of `.jsonl`. It holds one line per row: the row's id, then the timestamp exactly as the transcript records it. The mod reads the file when the session starts, and a row whose time is in it is drawn without reading the transcript. The file is written whole, one write at a time, because Claude Code carries out writes made at once in no set order.
@@ -28,9 +30,11 @@ The time of each row drawn is kept in a file beside the transcript, under the tr
 ## What is left as Claude Code draws it
 
 - Every row of a session that keeps no transcript.
-- What stands outside the transcript: the spinner, the band above the prompt and the lines under it.
+- What stands outside the transcript: the spinner, the band above the prompt, the lines under it, and the status lines under the logo.
 - A slash command's output, which stands under the command's own line, a line Claude Code gives no mod to draw.
+- A shell command typed at the prompt with `!`, and its output: Claude Code gives a mod neither to draw.
 - A subagent's closing `SubagentHandback` call, for which Claude Code draws no row.
+- The reply Claude Code itself adds to a session it forks, `No response requested.`, for which it draws no row either.
 
 ## How it reads the transcript
 
