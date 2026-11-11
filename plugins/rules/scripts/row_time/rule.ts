@@ -51,9 +51,14 @@ async function transcriptsOf($: EngineInterface, transcript: string): Promise<st
 async function timestampIn($: EngineInterface, file: string, id: string): Promise<string | undefined> {
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes. Claude Code aborts
   // the read under way for a drawing it drops, which is no record found: the row is read again when next drawn.
-  const { stdout } = await $.process.run(['tail', '-n', '+1', file]).catch(() => ({ stdout: '' }))
-  const record = stdout.split('\n').find((line) => recordsRow(line, id))
-  return record && JSON.parse(record).timestamp
+  for (let read = 0; ; ) {
+    const { stdout } = await $.process.run(['tail', '-n', `+${read + 1}`, file]).catch(() => ({ stdout: '' }))
+    const lines = stdout.split('\n').slice(0, -1)
+    if (lines.length === 0) return undefined
+    const record = lines.find((line) => recordsRow(line, id))
+    if (record) return JSON.parse(record).timestamp
+    read += lines.length
+  }
 }
 
 /**
