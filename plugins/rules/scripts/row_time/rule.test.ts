@@ -60,11 +60,16 @@ const SKILL_SESSION = transcript(
   user('73140532-9633-4a83-ba1c-d78afab74721', '2026-11-10T09:31:02.391Z', [{ type: 'tool_result', tool_use_id: SKILL_CALL.tool_use_id, content: 'Launching skill: plugin-authoring' }]),
 )
 
+// The Skill call's row as the terminal draws it.
+function drawSkillRow($: Engine) {
+  return $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+}
+
 // The Skill call's row as the terminal draws it, in a session whose transcript holds SKILL_SESSION.
 async function skillRow($: Engine, on: On) {
   host(on, { [TRANSCRIPT]: SKILL_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  return $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+  return drawSkillRow($)
 }
 
 test('a tool-call row shows the time the transcript records for its call', async ($, on) => {
@@ -131,7 +136,7 @@ const BEFORE_THE_CALL = transcript(
 test('a row shows --:-- until the transcript has its time', async ($, on) => {
   host(on, { [TRANSCRIPT]: BEFORE_THE_CALL })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+  const ui = await drawSkillRow($)
   expect((await ui.find({ type: 'Text' }))?.text).toBe('--:-- ')
 })
 
@@ -140,7 +145,7 @@ test('once the transcript has the time, the row is redrawn in place with it', as
   const files = { [TRANSCRIPT]: BEFORE_THE_CALL }
   host(on, files)
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+  const ui = await drawSkillRow($)
   // Claude Code adds the call to the conversation, and writes it to the transcript a moment later.
   const call = { type: 'tool_use', id: SKILL_CALL.tool_use_id, name: 'Skill', input: SKILL_CALL.input } as const
   await $.session.append({
@@ -158,6 +163,6 @@ test('a row in a session that has no transcript is left exactly as Claude Code d
   host(on, {})
   // A session that keeps no transcript starts with an empty transcript path.
   await $.classic.SessionStart({ source: 'startup', transcript_path: '' })
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+  const ui = await drawSkillRow($)
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })

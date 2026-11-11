@@ -17,6 +17,7 @@ function recordsRow(line: string, id: string): boolean {
 }
 
 export const register: Register = (on) => {
+  // The session's transcript file: empty until the session starts, and for a session that keeps none.
   let transcript = ''
   on('classic.SessionStart', ($, e, next) => {
     transcript = e.transcript_path
