@@ -10,14 +10,22 @@ GAP = "  "  # between columns, because a description or an activity has single s
 # The Agent tool asks for a description of 3 to 5 words, which 32 columns holds whole; a longer one is cut here so that
 # it never crowds out the activity, the part of the row that changes: a 120-column panel still leaves the activity some 30.
 DESCRIPTION_LIMIT = 32
+# Likewise for the name and the model, whose widths are not bounded by anything the user sees: one long id must not empty every row's activity.
+NAME_LIMIT = 24
+MODEL_LIMIT = 16
+
+
+def clean(text):
+    """The text as Claude Code cleans it for its own row: control characters dropped, line breaks and runs of whitespace one space."""
+    return " ".join(re.sub(r"[\x00-\x08\x0e-\x1f\x7f-\x9f]", "", text).split())
 
 
 def short_model(model):
-    """The model's id without its provider's prefix, `claude-`, its snapshot's date or Bedrock's version, its version's numbers joined by dots.
+    """The model's id without its provider's prefix, `claude-`, its snapshot's date (`-` or Vertex's `@`) or Bedrock's version, its version's numbers joined by dots.
 
-    Both `claude-opus-4-6` and `us.anthropic.claude-opus-4-6-v1:0` are `opus-4.6`.
+    `claude-opus-4-6`, `us.anthropic.claude-opus-4-6-v1` and `claude-haiku-4-5@20251001` are `opus-4.6` and `haiku-4.5`.
     """
-    name = re.sub(r"^.*claude-|(?:-\d{8})?(?:-v\d+:\d+)?$", "", model)
+    name = re.sub(r"^.*claude-|(?:[-@]\d{8})?(?:-v\d+(?::\d+)?)?$", "", model)
     return re.sub(r"(?<=\d)-(?=\d)", ".", name)
 
 
@@ -71,9 +79,9 @@ def clip(text, width):
 def fixed_cells(task):
     """The agent's cells in the columns that line up across the rows: its type or name, its model and its description."""
     return [
-        task.get("name") or task["agentType"],
-        short_model(task.get("model", "")),  # absent only from a task that Claude Code restored from disk
-        clip(task["description"], DESCRIPTION_LIMIT),
+        clip(clean(task.get("name") or task["agentType"]), NAME_LIMIT),
+        clip(clean(short_model(task.get("model", ""))), MODEL_LIMIT),  # absent only from a task that Claude Code restored from disk
+        clip(clean(task["description"]), DESCRIPTION_LIMIT),
     ]
 
 
@@ -90,8 +98,9 @@ def time_and_tokens(task, now):
 def activity(task):
     """The agent's latest progress summary, or, until it has one, a note that it has none, so that the column never looks lost."""
     # Until the agent has a progress summary, Claude Code sends its description as its label.
-    if task["label"] != task["description"]:
-        return task["label"]
+    label = clean(task["label"])
+    if label != clean(task["description"]):
+        return label
     return "no summary yet" if task["status"] == "running" else "no summary"
 
 
@@ -125,4 +134,4 @@ def main(stdin, stdout, now):
 
 
 if __name__ == "__main__":
-    main(sys.stdin, sys.stdout, time.time_ns() // 1_000_000)
+    main(sys.stdin.buffer, sys.stdout, time.time_ns() // 1_000_000)

@@ -1,7 +1,10 @@
 """Tests for "Agent rows". Run from the repo root: uv run pytest"""
 import io
 import json
+import os
 import re
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -81,12 +84,40 @@ def test_model_follows_the_type_in_short():
 
 
 @pytest.mark.parametrize("model, short", [
-    pytest.param("us.anthropic.claude-opus-4-6-v1:0", "opus-4.6", id="bedrock"),
+    pytest.param("us.anthropic.claude-opus-4-6-v1", "opus-4.6", id="bedrock"),
     pytest.param("claude-sonnet-4-5-20250929", "sonnet-4.5", id="snapshot_date"),
-    pytest.param("us.anthropic.claude-sonnet-4-5-20250929-v1:0", "sonnet-4.5", id="bedrock_snapshot_date"),
+    pytest.param("us.anthropic.claude-sonnet-4-5-20250929-v1:0", "sonnet-4.5", id="bedrock_snapshot_date_and_version"),
+    pytest.param("claude-haiku-4-5@20251001", "haiku-4.5", id="vertex_at_date"),
+    pytest.param("claude-sonnet-4-5@20250929", "sonnet-4.5", id="vertex_at_date_sonnet"),
 ])
 def test_short_model(model, short):
     assert short_model(model) == short
+
+
+def test_long_name_and_model_are_cut_so_that_they_leave_the_activity_its_room():
+    row = body(columns=120, name="n" * 80, model="claude-" + "m" * 80, label="Reading src/auth/session.py")
+    assert "Reading src/auth/session.py" in row
+
+
+def test_control_characters_and_line_breaks_are_cleaned_from_name_description_and_label():
+    row = body(name="auth\x1b]8;;http://x\x07-reviewer", description="Review\nthe\tauth  module\x9b", label="Reading\r\nsrc/auth\x00.py")
+    assert "\x1b" not in row and "\x07" not in row and "\x00" not in row and "\x9b" not in row
+    assert "\n" not in row and "\t" not in row and "\r" not in row
+    assert cells(row)[2:4] == ["Review the auth module", "Reading src/auth.py"]
+
+
+def test_description_cleaned_alike_in_label_still_shows_no_summary():
+    assert cells(body(description="Review\nthe auth module", label="Review the auth module"))[3] == "no summary yet"
+
+
+def test_script_runs_as_a_program_and_the_wired_command_is_that_file():
+    script = Path(__file__).with_name("row.py")
+    command = json.loads((script.parents[2] / "settings.json").read_text())["subagentStatusLine"]["command"]
+    assert command.replace('"${CLAUDE_PLUGIN_ROOT}"', str(script.parents[2])) == str(script)
+    panel = {"columns": 120, "tasks": [agent(description="Révise l'authentification")]}
+    # UTF-8 bytes under the C locale: reading stdin as text would crash on Python 3.9 to 3.14.
+    result = subprocess.run([str(script)], input=json.dumps(panel, ensure_ascii=False).encode(), capture_output=True, check=True, env={"PATH": os.environ["PATH"], "LC_ALL": "C"})
+    assert json.loads(result.stdout)["id"] == "a1"
 
 
 def test_description_follows_the_model():
