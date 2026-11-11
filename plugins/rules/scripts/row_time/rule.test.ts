@@ -26,9 +26,13 @@ function timeOfDay(timestamp: string): string {
 }
 
 // The host beneath the plugin: a session that starts, and its files. A plugin's own file read refuses a file over
-// 4 MiB, which a transcript passes, so the files are read from a line on by tail.
+// 4 MiB, which a transcript passes, so the files are read from a line on by tail. A write replaces a file whole.
 function host(on: On, files: Record<string, string>) {
   on('classic.SessionStart', () => ({}))
+  on('fs.write', ($, e) => {
+    files[e.path] = e.text
+    return { value: undefined }
+  })
   on('process.run', ($, e) => {
     const [command, flag, from, path] = e.argv
     const text = path === undefined ? undefined : files[path]
@@ -165,4 +169,14 @@ test('a row in a session that has no transcript is left exactly as Claude Code d
   await $.classic.SessionStart({ source: 'startup', transcript_path: '' })
   const ui = await drawSkillRow($)
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
+
+const TIMES = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a.times'
+
+test('a time read from the transcript is kept in a file in the transcript directory, as the transcript records it', async ($, on) => {
+  const files: Record<string, string> = { [TRANSCRIPT]: SKILL_SESSION }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  await drawSkillRow($)
+  expect(files[TIMES]).toBe(`${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n`)
 })
