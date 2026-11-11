@@ -86,3 +86,15 @@ test('the time sits one line down, beside the ⏺ under the blank line Claude Co
   const ui = await skillRow($, on)
   expect(await ui.drawn()).toMatchObject({ children: [{ type: 'Box', props: { marginTop: 1 } }, {}] })
 })
+
+const REPLY_ID = '8d4d70ff-4e29-4404-bc72-1641876dc44a'
+const REPLY = { text: 'The plugin-authoring skill is loaded.', isFirstOfReply: true }
+
+test('a reply row shows the time the transcript records for its text', async ($, on) => {
+  // The session went on: two minutes after the call, Claude replied.
+  const reply = assistant(REPLY_ID, '2026-11-10T09:32:41.970Z', { type: 'text', text: REPLY.text })
+  host(on, { [TRANSCRIPT]: SKILL_SESSION + transcript(reply) })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AssistantMessage', requestId: REPLY_ID, props: REPLY })
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:32:41.970Z')} `)
+})
