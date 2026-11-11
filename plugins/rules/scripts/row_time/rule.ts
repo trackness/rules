@@ -74,11 +74,12 @@ async function readOn($: EngineInterface, file: string, { linesRead, recorded }:
   // read when a row is next looked for.
   for (;;) {
     const read = linesRead.get(file) ?? 0
-    const { stdout, isStdoutTruncated } = await $.process.run(['tail', '-n', `+${read + 1}`, file]).catch(() => ({ stdout: '', isStdoutTruncated: false }))
+    const { stdout, isStdoutTruncated } = await $.process.run(['tail', '-c', `+${read + 1}`, file]).catch(() => ({ stdout: '', isStdoutTruncated: false }))
     // What follows the last line break is a line cut short, or nothing.
-    const lines = stdout.split('\n').slice(0, -1)
+    const whole = stdout.slice(0, stdout.lastIndexOf('\n') + 1)
+    const lines = whole.split('\n').slice(0, -1)
     for (const line of lines) noteTimes(line, recorded)
-    linesRead.set(file, read + lines.length)
+    linesRead.set(file, read + new TextEncoder().encode(whole).length)
     // There is no more to read: the stretch was handed back whole, or held no whole line, being cut inside a first
     // line longer than Claude Code hands back.
     if (!isStdoutTruncated || lines.length === 0) return
