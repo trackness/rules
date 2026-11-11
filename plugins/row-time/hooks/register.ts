@@ -4,10 +4,11 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 const NOT_YET = '--:--'
 
 /**
- * What Claude Code draws outside the transcript, and so records no time for: the spinner, the band above the prompt,
- * the lines under it, and the status lines under the logo.
+ * The rows of the terminal transcript that Claude Code records a time for: a prompt, a notice and a reply, a tool call,
+ * a folded run of calls, and the line that closes a turn. Everything else it draws is left alone, such as what stands
+ * outside the transcript, a call's result under its call, and a slash command's output under the command's own line.
  */
-const OUTSIDE_THE_TRANSCRIPT = ['Spinner', 'AbovePrompt', 'PromptHint', 'SessionMode', 'InfoNotice']
+const TIMED = ['UserMessage', 'AssistantMessage', 'ToolUse', 'ToolGroup', 'TurnDuration']
 
 /** The text of the reply Claude Code 2.1.322 adds to a session it forks, in the model's place. */
 const ADDED_REPLY = 'No response requested.'
@@ -170,15 +171,11 @@ export const register: Register = (on) => {
     return stored
   })
   on('ui.render', async ($, e, next) => {
-    if (transcript === '' || OUTSIDE_THE_TRANSCRIPT.includes(e.component)) return next(e)
+    if (transcript === '' || e.surface !== 'terminal' || !TIMED.includes(e.component)) return next(e)
     // A subagent ends with a SubagentHandback call, for which Claude Code draws no row.
     if (e.component === 'ToolUse' && e.props.tool === 'SubagentHandback') return next(e)
     // Nor does it draw one for the reply it adds to a forked session itself, which only its text tells apart.
     if (e.component === 'AssistantMessage' && e.props.text === ADDED_REPLY) return next(e)
-    // A slash command's output stands under the command's own line, which Claude Code hands no plugin to draw.
-    if (e.component === 'CommandOutput') return next(e)
-    // A result is part of its call's row: it stands under the call, which carries the time.
-    if (e.component === 'ToolResult') return next(e)
     const { Box, Text } = $.ui.resolve(e)
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId

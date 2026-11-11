@@ -291,6 +291,21 @@ test('what Claude Code draws outside the transcript is left as it draws it: the 
   expect(drawn.map((tree) => tree.type)).toEqual(['engine', 'engine', 'engine', 'engine'])
 })
 
+test('a pane a plugin opens, which the transcript does not record, is left as Claude Code draws it', async ($, on) => {
+  host(on, { [TRANSCRIPT]: SKILL_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const pane = { title: 'notes', isFocused: false, bodyColumns: 40, placement: 'inline', scroll: { offset: 0, bodyRows: 10 }, view: {} } as const
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'Pane', requestId: 'notes', props: pane })
+  expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
+
+test('a row drawn on a surface other than the terminal is left as that surface draws it', async ($, on) => {
+  host(on, { [TRANSCRIPT]: SKILL_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'desktop', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+  expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
+
 test('a subagent\'s handback call, which Claude Code draws nothing for, shows no time', async ($, on) => {
   // A subagent ends by calling SubagentHandback, and its view draws no row for the call.
   const subagent = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a/subagents/agent-ae990d03dc2e2a409.jsonl'
