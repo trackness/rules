@@ -100,7 +100,9 @@ async function lookFor($: EngineInterface, transcript: string, reading: Reading,
  */
 async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, reading: Reading, id: string): Promise<string | undefined> {
   if (kept.has(id)) return kept.get(id)
+  const waitedOn = reading.underWay
   if (!reading.recorded.has(id)) await (reading.underWay ??= lookFor($, transcript, reading, id).finally(() => delete reading.underWay))
+  if (waitedOn && !reading.recorded.has(id)) await (reading.underWay ??= lookFor($, transcript, reading, id).finally(() => delete reading.underWay))
   const timestamp = reading.recorded.get(id)
   if (timestamp) {
     kept.set(id, timestamp)
