@@ -404,6 +404,13 @@ test('a row that waited on another row\'s read, which Claude Code cut short, rea
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:32:41.970Z')} `)
 })
 
+test('a row drawn before the session starts, as a resumed session\'s rows are, is redrawn with its time once it has started', async ($, on) => {
+  host(on, { [TRANSCRIPT]: SKILL_SESSION, [TIMES]: `${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n` })
+  const ui = await drawSkillRow($)
+  await $.classic.SessionStart({ source: 'resume', transcript_path: TRANSCRIPT })
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
 test('the file keeps the time of every row drawn at once', async ($, on) => {
   const files: Record<string, string> = { [TRANSCRIPT]: REPLY_SESSION }
   host(on, files)
