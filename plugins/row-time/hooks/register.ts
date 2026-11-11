@@ -164,6 +164,14 @@ async function recordedTimestamp($: EngineInterface, transcript: string, kept: K
   return timestamp
 }
 
+/** The times a transcript's times file keeps: none while it has no times file. */
+async function timesKept($: EngineInterface, transcript: string): Promise<Map<string, string>> {
+  return keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
+}
+
+/** Where the session holds its transcript's path, for a later load of the mod. */
+const HELD_TRANSCRIPT = { plugin: 'row-time', key: 'transcript' } as const
+
 export const register: Register = (on) => {
   // The session's transcript file: empty until the session starts, and for a session that keeps none.
   let transcript = ''
@@ -172,9 +180,20 @@ export const register: Register = (on) => {
   // No .catch: Claude Code skips a hook that fails, and the session goes on as it would without the mod.
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
-    kept.times = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
+    kept.times = await timesKept($, transcript)
     // Claude Code draws a resumed session's rows before it starts the session, while the transcript is not yet
     // known: they are drawn again now that it is.
+    $.ui.invalidate('ui.render')
+    await $.state.set(HELD_TRANSCRIPT, transcript)
+    return next(e)
+  })
+  // A load of the mod that hears no classic.SessionStart, as a reload, an enable or a worker respawn is, takes up the
+  // path an earlier load held. A first enable in the middle of a session finds none, and times its rows from the next.
+  on('session.start', async ($, e, next) => {
+    const { value = '' } = await $.state.get(HELD_TRANSCRIPT)
+    if (transcript !== '' || value === '') return next(e)
+    transcript = value
+    kept.times = await timesKept($, transcript)
     $.ui.invalidate('ui.render')
     return next(e)
   })

@@ -41,6 +41,7 @@ const READ_ON = 'tail -c "+$1" "$2" | head -c 4194305'
 function host(on: On, files: Record<string, string>, commandsAborted = 0, written: string[] = []) {
   const ran: (readonly string[])[] = []
   on('classic.SessionStart', () => ({}))
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('fs.read', ($, e) => {
     const text = files[e.path]
     if (text === undefined) throw new Error(`ENOENT: no such file or directory, open '${e.path}'`)
@@ -466,6 +467,39 @@ test('a row drawn before the session starts, as a resumed session\'s rows are, i
   const ui = await drawSkillRow($)
   await $.classic.SessionStart({ source: 'resume', transcript_path: TRANSCRIPT })
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
+test('the session holds its transcript\'s path for a later load of the mod', async ($, on) => {
+  host(on, { [TRANSCRIPT]: SKILL_SESSION })
+  const held: unknown[] = []
+  on('state.set', ($, e) => {
+    held.push({ plugin: e.plugin, key: e.key, value: e.value })
+    return { value: { isSet: true, version: 1 } }
+  })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  expect(held).toEqual([{ plugin: 'row-time', key: 'transcript', value: TRANSCRIPT }])
+})
+
+// A reload, an enable or a worker respawn loads the mod afresh, and it hears session.start but no classic.SessionStart,
+// in a session where an earlier load of the mod held the transcript's path.
+async function reload($: Engine, on: On) {
+  on('state.get', () => ({ value: { value: TRANSCRIPT, version: 1 } }))
+  await $.session.start({ cwd: '/srv/work', surface: 'terminal', isInteractive: true })
+}
+
+test('a row drawn after a reload of the mod shows its time, from the transcript the session holds', async ($, on) => {
+  host(on, { [TRANSCRIPT]: SKILL_SESSION })
+  await reload($, on)
+  const ui = await drawSkillRow($)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
+test('a reload of the mod keeps the times the earlier load kept in the file', async ($, on) => {
+  const files: Record<string, string> = { [TRANSCRIPT]: REPLY_SESSION, [TIMES]: `${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n` }
+  host(on, files)
+  await reload($, on)
+  await drawReplyRow($)
+  expect(files[TIMES]).toBe(`${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:32:41.970Z\n`)
 })
 
 test('a status line under the logo, which the transcript does not record, is left as Claude Code draws it', async ($, on) => {
