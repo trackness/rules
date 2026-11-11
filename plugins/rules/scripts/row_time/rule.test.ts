@@ -121,3 +121,15 @@ test('a run of tool calls folded into one line shows the time of its first call'
   const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolGroup', requestId: 'collapsed-293589d0-56e7-4054-97df-b0b2665696e7', props: run })
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:41:07.346Z')} `)
 })
+
+test('a row shows --:-- until the transcript has its time', async ($, on) => {
+  // The row is drawn as the call is made, before Claude Code has written the call to the transcript.
+  const written = transcript(
+    user('e0a040a6-aec9-4274-97fb-1f81430a0f1a', '2026-11-10T09:28:40.249Z', 'Load the plugin-authoring skill'),
+    assistant('90d8109b-6574-4132-9ae5-a58647538c3a', '2026-11-10T09:29:59.956Z', { type: 'thinking', thinking: '', signature: 'EqQBCkYI' }),
+  )
+  host(on, { [TRANSCRIPT]: written })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+  expect((await ui.find({ type: 'Text' }))?.text).toBe('--:-- ')
+})
