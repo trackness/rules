@@ -28,7 +28,12 @@ const ROW_ID = /"(?:id|uuid)":"([^"]*)"/g
 
 /** Notes the time a line of the transcript records, under each row the line names that no earlier line has timed. */
 function noteTimes(line: string, recorded: Map<string, string>): void {
-  const { timestamp } = JSON.parse(line)
+  let timestamp
+  try {
+    timestamp = JSON.parse(line).timestamp
+  } catch {
+    return
+  }
   // Some lines carry no time, such as the copy Claude Code keeps of a request, which repeats the ids of its tool calls.
   if (!timestamp) return
   for (const [, id = ''] of line.matchAll(ROW_ID)) if (!recorded.has(id)) recorded.set(id, timestamp)
@@ -85,10 +90,9 @@ async function readOn($: EngineInterface, file: string, { bytesRead, recorded }:
     // What follows the last line break is a line cut short, or nothing.
     const wholeLines = stdout.slice(0, stdout.lastIndexOf('\n') + 1)
     for (const line of wholeLines.split('\n').slice(0, -1)) noteTimes(line, recorded)
-    bytesRead.set(file, read + new TextEncoder().encode(wholeLines).length)
-    // There is no more to read: the stretch was handed back whole, or held no whole line, being cut inside a first
-    // line longer than Claude Code hands back.
-    if (!isStdoutTruncated || wholeLines === '') return
+    const passed = isStdoutTruncated && wholeLines === '' ? stdout : wholeLines
+    bytesRead.set(file, read + new TextEncoder().encode(passed).length)
+    if (!isStdoutTruncated) return
   }
 }
 
