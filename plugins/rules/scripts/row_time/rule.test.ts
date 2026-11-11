@@ -1,5 +1,5 @@
 import type { On } from 'claude-code'
-import { expect, test } from 'claude-code/testing'
+import { expect, test, type Engine } from 'claude-code/testing'
 
 const TRANSCRIPT = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a.jsonl'
 
@@ -60,16 +60,19 @@ const SKILL_SESSION = transcript(
   user('73140532-9633-4a83-ba1c-d78afab74721', '2026-11-10T09:31:02.391Z', [{ type: 'tool_result', tool_use_id: SKILL_CALL.tool_use_id, content: 'Launching skill: plugin-authoring' }]),
 )
 
-test('a tool-call row shows the time the transcript records for its call', async ($, on) => {
+// The Skill call's row as the terminal draws it, in a session whose transcript holds SKILL_SESSION.
+async function skillRow($: Engine, on: On) {
   host(on, { [TRANSCRIPT]: SKILL_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+  return $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+}
+
+test('a tool-call row shows the time the transcript records for its call', async ($, on) => {
+  const ui = await skillRow($, on)
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
 
 test('the time stands to the left of the row Claude Code draws', async ($, on) => {
-  host(on, { [TRANSCRIPT]: SKILL_SESSION })
-  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+  const ui = await skillRow($, on)
   expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'row' }, children: [{}, { type: 'engine' }] })
 })
