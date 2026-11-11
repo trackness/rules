@@ -17,9 +17,15 @@ function timeOfDay(timestamp: string): string {
   return new Date(timestamp).toTimeString().slice(0, 5)
 }
 
-/** True if a line of the transcript records the row: a tool call by the id of the block the line holds, a reply by the line's own id. */
-function recordsRow(line: string, id: string): boolean {
-  return line.includes(`"id":"${id}"`) || line.includes(`"uuid":"${id}"`)
+/** Where a line of the transcript names a row it records: a tool call by the id of the block the line holds, a reply by the line's own id. */
+const ROW_ID = /"(?:id|uuid)":"([^"]*)"/g
+
+/** Notes the time a line of the transcript records, under each row the line names that no earlier line has timed. */
+function noteTimes(line: string, recorded: Map<string, string>): void {
+  const { timestamp } = JSON.parse(line)
+  // Some lines carry no time, such as the copy Claude Code keeps of a request, which repeats the ids of its tool calls.
+  if (!timestamp) return
+  for (const [, id] of line.matchAll(ROW_ID)) if (!recorded.has(id)) recorded.set(id, timestamp)
 }
 
 /** The file that keeps the times read from a transcript: beside the transcript, under its name. */
@@ -47,7 +53,10 @@ async function transcriptsOf($: EngineInterface, transcript: string): Promise<st
   return [transcript, ...theirs.map((entry) => `${subagents}/${entry.name}`)]
 }
 
-/** The timestamp a transcript file records for a row, or undefined where it holds no record of the row. */
+/**
+ * The timestamp a transcript file records for a row, or undefined where it holds no record of the row. The time of
+ * every row read on the way is noted.
+ */
 async function timestampIn($: EngineInterface, file: string, recorded: Map<string, string>, id: string): Promise<string | undefined> {
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes. Claude Code hands
   // back only the first 4 MiB of what tail writes, so the file is read a stretch at a time, each from the line after
@@ -58,24 +67,21 @@ async function timestampIn($: EngineInterface, file: string, recorded: Map<strin
     // What follows the last line break is a line cut short, or nothing.
     const lines = stdout.split('\n').slice(0, -1)
     if (lines.length === 0) return undefined
-    for (const line of lines) {
-      const { timestamp } = JSON.parse(line)
-      for (const [, row] of line.matchAll(/"(?:id|uuid)":"([^"]*)"/g)) if (timestamp && !recorded.has(row)) recorded.set(row, timestamp)
-    }
+    for (const line of lines) noteTimes(line, recorded)
     if (recorded.has(id)) return recorded.get(id)
     linesRead += lines.length
   }
 }
 
 /**
- * The timestamp the transcript records for a row: the one kept, or else the one read from the transcript, which is
- * then kept, in the times file too. Undefined until the transcript holds the row.
+ * The timestamp the transcript records for a row: the one kept, or else the one noted in a read of the transcript,
+ * made now unless an earlier one has the row, which is then kept, in the times file too. Undefined until the
+ * transcript holds the row.
  */
 async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, recorded: Map<string, string>, id: string): Promise<string | undefined> {
   if (kept.has(id)) return kept.get(id)
-  for (const file of recorded.has(id) ? [] : await transcriptsOf($, transcript)) {
-    if (await timestampIn($, file, recorded, id)) break
-  }
+  const toRead = recorded.has(id) ? [] : await transcriptsOf($, transcript)
+  for (const file of toRead) if (await timestampIn($, file, recorded, id)) break
   const timestamp = recorded.get(id)
   if (timestamp) {
     kept.set(id, timestamp)
@@ -89,6 +95,7 @@ export const register: Register = (on) => {
   let transcript = ''
   // The times read so far, as the transcript records them, by the id of their row: what the times file holds.
   let kept = new Map<string, string>()
+  // The time of every row in the lines read so far, by the id of the row: the rows drawn, and those not yet drawn.
   const recorded = new Map<string, string>()
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
