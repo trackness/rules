@@ -1,5 +1,4 @@
 {
-  "modules": ["../scripts/subagent_model/rule.ts"],
   "hooks": {
     "PreToolUse": [
       {

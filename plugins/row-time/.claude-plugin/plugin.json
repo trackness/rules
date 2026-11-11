@@ -1,0 +1,5 @@
+{
+  "name": "row-time",
+  "description": "Shows each transcript row's time to its left.",
+  "author": { "name": "trackness" }
+}

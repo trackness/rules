@@ -19,7 +19,7 @@ The engine reports it to Claude in the run's result, possibly wrapped: left unca
 - any agent while `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` is on, since Claude Code then ignores the model a call names
 - any workflow agent while `CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL` names a model, since Claude Code then ignores the model a script names
 
-A workflow run by name is checked like a script Claude wrote when a script saved on disk runs by that name, since Claude could have saved it there; a saved script that parses overrides a built-in or plugin workflow of its name. Claude Code 2.1.319 runs a saved workflow by the `name` in its `meta`, and the rule looks for one where Claude Code's binary does, in the `.js` files directly in these folders:
+A workflow run by name is checked like a script Claude wrote when a script saved on disk runs by that name, since Claude could have saved it there; a saved script that parses overrides a built-in or plugin workflow of its name. Claude Code 2.1.322 runs a saved workflow by the `name` in its `meta`, and the rule looks for one where Claude Code's binary does, in the `.js` files directly in these folders:
 
 - `.claude/workflows/` in the working directory and in each directory above it, up to and including the repository root, stopping before the home folder if the walk reaches it. Outside a repository, the walk goes on to the file system root unless it reaches the home folder first. A repository nested in the repository of the session's project root walks on to that outer repository's root, unless it is a worktree of it.
 - the personal folder: `workflows/` in `CLAUDE_CONFIG_DIR`, which is `.claude` in the home folder unless set, the home folder being `USERPROFILE` on Windows and `HOME` elsewhere, as Node's `os.homedir()` reads it
@@ -37,8 +37,19 @@ In these rarer cases the lookup can differ from Claude Code's either way, so the
 
 The rule ties a workflow's agents to the Workflow call that started the run, and keeps which calls it checks in memory. So an agent whose spawn carries no such call, as Claude Code allows on a resumed or server-launched run, is not checked, and nor is an agent that a run started before the plugin's hooks reloaded spawns after the reload.
 
-Like the other rules, the hooks have no fallback: if one fails, Claude Code skips it and the call goes through unchecked.
+Like the rules plugin's hooks, the rule's hooks have no fallback: if one fails, Claude Code skips it and the call goes through unchecked.
 
 An agent whose definition pins a model still needs one on the call, because the spawn doesn't show what a definition pins. After one refusal Claude names a model, and the call's model then replaces the definition's.
 
 A subagent spawned without a model runs on whatever the session's settings and the agent's definition resolve to, falling back to the parent's model, rather than on a model chosen for its task.
+
+## Requirements
+
+The rule is a mod, a TypeScript hooks module that Claude Code runs itself, built and tested against Claude Code 2.1.322; mods are early access, and their API can change between releases. Claude Code doesn't load the module while its rollout flag for installed plugins' hooks modules is off; until the workspace is trusted, it runs none of the plugin's hooks.
+
+## Install
+
+```sh
+claude plugin marketplace add trackness/rules
+claude plugin install subagent-model@rules
+```

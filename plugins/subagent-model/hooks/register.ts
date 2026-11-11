@@ -1,5 +1,4 @@
 import type { EngineInterface, Register } from 'claude-code'
-import { register as registerRowTime } from '../row_time/rule'
 
 const AGENT_REASON =
   'Every subagent must run on a model appropriately capable for its task. Retry this call with the model parameter set to that model.'
@@ -47,7 +46,7 @@ async function isWorktreeOf($: EngineInterface, root: string, outer: string): Pr
 }
 
 /**
- * The folders Claude Code 2.1.319 loads saved workflows from, as its binary walks them: .claude/workflows in the working
+ * The folders Claude Code 2.1.322 loads saved workflows from, as its binary walks them: .claude/workflows in the working
  * directory and in each one above it, stopping before the home folder and after the repository root, or at the file
  * system root outside a repository and the home folder. A repository nested in the session's own, unless it is a
  * worktree of it, walks on to the session repository's root. Then the personal folder: workflows in CLAUDE_CONFIG_DIR,
@@ -85,11 +84,10 @@ async function isSavedWorkflow($: EngineInterface, name: string): Promise<boolea
   return false
 }
 
-export const register: Register = (on, options) => {
-  registerRowTime(on, options)
+export const register: Register = (on) => {
   // The ids of the Workflow calls running a script Claude could have written, which its agents' spawns carry as their
   // tool_use_id. A plugin can't call Workflow (the engine refuses it), so every call seen here is Claude's.
-  // No .catch, as with this plugin's other rules: if a hook fails, the engine skips it and the call goes through.
+  // No .catch, as with the rules plugin's hooks: if a hook fails, the engine skips it and the call goes through.
   const scripted = new Set<string>()
   on('tool.call', { tool: 'Workflow' }, async ($, e, next) => {
     const isScripted = e.script !== undefined || e.scriptPath !== undefined

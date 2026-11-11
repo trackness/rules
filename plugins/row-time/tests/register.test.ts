@@ -60,7 +60,7 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0) {
   on('process.run', ($, e) => {
     ran.push(e.argv)
     // Claude Code aborts the command under way for a drawing it drops: here, the first commands the plugin runs.
-    if (ran.length <= commandsAborted) throw new Error(`rules: $.process.run(${String(e.argv[0])}) aborted`)
+    if (ran.length <= commandsAborted) throw new Error(`row-time: $.process.run(${String(e.argv[0])}) aborted`)
     const [command, flag, from, path] = e.argv
     const text = path === undefined ? undefined : files[path]
     if (command !== 'tail' || flag !== '-c' || text === undefined) {
@@ -95,7 +95,7 @@ const SKILL_SESSION = transcript(
 
 // The Skill call's row as the terminal draws it.
 function drawSkillRow($: Engine) {
-  return $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+  return $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
 }
 
 // The Skill call's row as the terminal draws it, in a session whose transcript holds SKILL_SESSION.
@@ -133,7 +133,7 @@ const REPLY_SESSION = SKILL_SESSION + transcript(assistant(REPLY_ID, '2026-11-10
 
 // The reply's row as the terminal draws it.
 function drawReplyRow($: Engine) {
-  return $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AssistantMessage', requestId: REPLY_ID, props: REPLY })
+  return $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'AssistantMessage', requestId: REPLY_ID, props: REPLY })
 }
 
 test('a reply row shows the time the transcript records for its text', async ($, on) => {
@@ -162,7 +162,7 @@ test('a run of tool calls folded into one line shows the time of its first call'
   host(on, { [TRANSCRIPT]: session })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const run = { calls: [readme, contributing], isActive: false, isExpanded: false, isCallsOnly: true }
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolGroup', requestId: 'collapsed-293589d0-56e7-4054-97df-b0b2665696e7', props: run })
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolGroup', requestId: 'collapsed-293589d0-56e7-4054-97df-b0b2665696e7', props: run })
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:41:07.346Z')} `)
 })
 
@@ -251,7 +251,7 @@ test('a row of a subagent shows the time the subagent\'s own transcript records 
   }
   host(on, files)
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: listing.tool_use_id, props: listing })
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolUse', requestId: listing.tool_use_id, props: listing })
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T10:02:05.310Z')} `)
 })
 
@@ -266,7 +266,7 @@ test('a row whose read of the transcript is cut short shows --:--', async ($, on
     throw new Error(`ENOENT: no such file or directory, scandir '${e.path}'`)
   })
   on('process.run', () => {
-    throw new Error('rules: $.process.run(tail) aborted')
+    throw new Error('row-time: $.process.run(tail) aborted')
   })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const ui = await drawSkillRow($)
@@ -276,11 +276,11 @@ test('a row whose read of the transcript is cut short shows --:--', async ($, on
 test('what Claude Code draws outside the transcript is left as it draws it: the spinner, the band above the prompt and the lines under it', async ($, on) => {
   host(on, { [TRANSCRIPT]: SKILL_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  const spinner = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'Spinner', props: { word: 'Undulating', message: null, suffix: '…', mode: 'thinking' } })
+  const spinner = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'Spinner', props: { word: 'Undulating', message: null, suffix: '…', mode: 'thinking' } })
   const bandProps = { hasSurvey: false, isCollapsed: false, isWorking: true, maxRows: 17, bodyColumns: 155, scroll: { offset: 0, bodyRows: 16 }, view: {} }
-  const band = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AbovePrompt', requestId: 'above-prompt', props: bandProps })
-  const hint = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'PromptHint', requestId: 'prompt-hint', props: { isDraft: false, isWorking: true, hint: '(shift+tab to cycle)' } })
-  const mode = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'SessionMode', requestId: 'session-mode', props: { modes: [] } })
+  const band = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'AbovePrompt', requestId: 'above-prompt', props: bandProps })
+  const hint = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'PromptHint', requestId: 'prompt-hint', props: { isDraft: false, isWorking: true, hint: '(shift+tab to cycle)' } })
+  const mode = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'SessionMode', requestId: 'session-mode', props: { modes: [] } })
   const drawn = [await spinner.drawn(), await band.drawn(), await hint.drawn(), await mode.drawn()]
   expect(drawn.map((tree) => tree.type)).toEqual(['engine', 'engine', 'engine', 'engine'])
 })
@@ -293,7 +293,7 @@ test('a subagent\'s handback call, which Claude Code draws nothing for, shows no
   const call = assistant('6ad49b99-b521-4ebf-8f38-fb98b8ca8a1a', '2026-11-10T10:02:09.118Z', { type: 'tool_use', id: handback.tool_use_id, name: 'SubagentHandback', input })
   host(on, { [TRANSCRIPT]: SKILL_SESSION, [subagent]: transcript(call) })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: handback.tool_use_id, props: handback })
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolUse', requestId: handback.tool_use_id, props: handback })
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })
 
@@ -301,7 +301,7 @@ test('a tool call\'s result stays under its call, moved right by the width of a 
   host(on, { [TRANSCRIPT]: SKILL_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const result = { tool_use_id: SKILL_CALL.tool_use_id, tool: 'Skill', output: SKILL_CALL.output, isErrored: false, isExpanded: false }
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolResult', requestId: SKILL_CALL.tool_use_id, props: result })
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolResult', requestId: SKILL_CALL.tool_use_id, props: result })
   expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'row' }, children: [{ type: 'Text', children: ['      '] }, { type: 'engine' }] })
 })
 
@@ -311,7 +311,7 @@ test('the prompt a subagent has from main, which Claude Code draws under a label
   host(on, { [TRANSCRIPT]: SKILL_SESSION, [subagent]: transcript(prompt) })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const props = { text: 'Run the Bash command `echo hi` and then reply done.', origin: { kind: 'coordinator' }, isExpanded: false } as const
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'UserMessage', requestId: '8192dc5a-249e-49bc-b50e-74caa4f7c02d', props })
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'UserMessage', requestId: '8192dc5a-249e-49bc-b50e-74caa4f7c02d', props })
   expect(await ui.drawn()).toMatchObject({ children: [{ type: 'Box', props: { marginTop: 0 } }, {}] })
 })
 
@@ -319,7 +319,7 @@ test('a slash command\'s output, which Claude Code draws under the command\'s ow
   host(on, { [TRANSCRIPT]: SKILL_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const output = { command: 'tasks', args: '', text: 'Viewing agent', isErrored: false }
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'CommandOutput', requestId: 'b19f5b34-dba6-4810-9b4a-df2a3c88fa09', props: output })
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'CommandOutput', requestId: 'b19f5b34-dba6-4810-9b4a-df2a3c88fa09', props: output })
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })
 
@@ -391,7 +391,7 @@ test('a row drawn at once with a row recorded 4 MiB before it shows its time', a
   host(on, { [TRANSCRIPT]: LONG_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   // The first read's row, recorded at the top of the transcript.
-  const firstRead = $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: logRead(0).tool_use_id, props: { ...logRead(0), isExpanded: false } })
+  const firstRead = $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolUse', requestId: logRead(0).tool_use_id, props: { ...logRead(0), isExpanded: false } })
   const [, ui] = await Promise.all([firstRead, drawSkillRow($)])
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
@@ -415,7 +415,7 @@ test('a status line under the logo, which the transcript does not record, is lef
   host(on, { [TRANSCRIPT]: SKILL_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const notice = { text: 'Debug mode enabled · logging to /home/me/debug.log', command: null }
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'InfoNotice', requestId: `notice:${notice.text}`, props: notice })
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'InfoNotice', requestId: `notice:${notice.text}`, props: notice })
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })
 
@@ -424,7 +424,7 @@ test('the reply Claude Code itself adds to a forked session, which it draws noth
   host(on, { [TRANSCRIPT]: SKILL_SESSION + transcript(added) })
   await $.classic.SessionStart({ source: 'resume', transcript_path: TRANSCRIPT })
   const props = { text: 'No response requested.', isFirstOfReply: true }
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AssistantMessage', requestId: '2bb86f3e-d64b-41c1-903e-3d13a2707994', props })
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'AssistantMessage', requestId: '2bb86f3e-d64b-41c1-903e-3d13a2707994', props })
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })
 

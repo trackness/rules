@@ -52,5 +52,17 @@ In one run of Claude Code, each line of a transcript is read once, however long 
 
 Built and run against Claude Code 2.1.322. What the mod does not yet do right:
 
-- **A reply in the ctrl+o view.** Claude Code draws its own time and model on a line above each reply there, in place of the blank line it draws in the normal view, and tells a mod nothing of it, so the reply's time lands one line below its `⏺`. Claude Code's code draws the same line above a reply in the normal view while its `showMessageTimestamps` setting is on. This is the one fault a fullscreen session without `--verbose` shows.
+- **A reply in the ctrl+o view.** Claude Code draws its own time and model on a line above each reply there, in place of the blank line it draws in the normal view, and tells a mod nothing of it, so the reply's time lands one line below its `⏺`. Claude Code's code draws the same line above a reply in the normal view while its `showMessageTimestamps` setting is on. A fullscreen session without `--verbose` shows it.
 - **A run of tool calls drawn unfolded.** Under `--verbose`, and in the ctrl+o view of the non-fullscreen screen, Claude Code draws a run's calls as rows of their own inside the run. The run and its first call then each carry a time, two on one line. A fullscreen session without `--verbose` does not show it.
+- **The line for agents launched in the background.** The line Claude Code draws when it launches agents in the background, such as `⏺ 4 background agents launched`, shows no time.
+
+## Requirements
+
+The mod is a TypeScript hooks module that Claude Code runs itself, built and tested against Claude Code 2.1.322; mods are early access, and their API can change between releases. Claude Code doesn't load the module while its rollout flag for installed plugins' hooks modules is off; until the workspace is trusted, it runs none of the plugin's hooks.
+
+## Install
+
+```sh
+claude plugin marketplace add trackness/rules
+claude plugin install row-time@rules
+```

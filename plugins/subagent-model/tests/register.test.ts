@@ -254,6 +254,13 @@ test('a worktree of the session\'s repository stops at its own root', async ($, 
   expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
 })
 
+// The other plugin's tool, declared so its name type-checks whichever MCP tools were connected when Claude Code laid the types.
+declare module 'claude-code' {
+  interface McpToolInputs {
+    mcp__spawner__summarise: {}
+  }
+}
+
 // Another plugin, which spawns an agent of its own without a model when its tool runs, and says whether it was denied.
 const SPAWNER = {
   name: 'spawner',
