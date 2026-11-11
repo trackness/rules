@@ -12,6 +12,9 @@ const NO_TIME = '      '
  */
 const OUTSIDE_THE_TRANSCRIPT = ['Spinner', 'AbovePrompt', 'PromptHint', 'SessionMode', 'InfoNotice']
 
+/** The text of the reply Claude Code 2.1.322 adds to a session it forks, in the model's place. */
+const ADDED_REPLY = 'No response requested.'
+
 /** How long the rows wait to be drawn again after the conversation gains a row, in milliseconds. */
 const WRITE_WAIT_MS = 100
 
@@ -159,7 +162,8 @@ export const register: Register = (on) => {
     if (transcript === '' || OUTSIDE_THE_TRANSCRIPT.includes(e.component)) return next(e)
     // A subagent ends with a SubagentHandback call, for which Claude Code draws no row.
     if (e.component === 'ToolUse' && e.props.tool === 'SubagentHandback') return next(e)
-    if (e.component === 'AssistantMessage' && e.props.text === 'No response requested.') return next(e)
+    // Nor does it draw one for the reply it adds to a forked session itself, which only its text tells apart.
+    if (e.component === 'AssistantMessage' && e.props.text === ADDED_REPLY) return next(e)
     // A slash command's output stands under the command's own line, which Claude Code hands no plugin to draw.
     if (e.component === 'CommandOutput') return next(e)
     const { Box, Text } = $.ui.resolve(e)
