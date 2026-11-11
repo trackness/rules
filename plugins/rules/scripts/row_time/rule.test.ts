@@ -234,3 +234,21 @@ test('a row of a subagent shows the time the subagent\'s own transcript records 
   const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: listing.tool_use_id, props: listing })
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T10:02:05.310Z')} `)
 })
+
+test('a row whose read of the transcript is cut short shows --:--', async ($, on) => {
+  // A host with no times file and no subagents, where Claude Code drops the drawing it asked for: the read under way
+  // for a dropped drawing is aborted.
+  on('classic.SessionStart', () => ({}))
+  on('fs.read', ($, e) => {
+    throw new Error(`ENOENT: no such file or directory, open '${e.path}'`)
+  })
+  on('fs.list', ($, e) => {
+    throw new Error(`ENOENT: no such file or directory, scandir '${e.path}'`)
+  })
+  on('process.run', () => {
+    throw new Error('rules: $.process.run(tail) aborted')
+  })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe('--:-- ')
+})
