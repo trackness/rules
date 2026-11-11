@@ -156,7 +156,8 @@ async function recordedTimestamp($: EngineInterface, transcript: string, kept: K
   // row's drawing: a row it leaves untimed reads on itself.
   if (isAnotherRowsRead && !reading.recorded.has(id)) await readUnderWay($, transcript, reading, id)
   const timestamp = reading.recorded.get(id)
-  if (timestamp) await keep($, transcript, kept, id, timestamp)
+  // A refused write, such as on a full disk, loses the file the time, not the row: a later write holds it.
+  if (timestamp) await keep($, transcript, kept, id, timestamp).catch(() => {})
   return timestamp
 }
 

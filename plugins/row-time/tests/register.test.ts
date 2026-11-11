@@ -491,6 +491,22 @@ test('the file keeps the time of every row drawn at once', async ($, on) => {
   expect(files[TIMES]).toBe(`${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:32:41.970Z\n`)
 })
 
+test('a row whose time the file cannot keep still shows the time', async ($, on) => {
+  // A host with no times file and no subagents, where the file cannot be written, as on a full disk.
+  on('classic.SessionStart', () => ({}))
+  on('fs.read', ($, e) => {
+    throw new Error(`ENOENT: no such file or directory, open '${e.path}'`)
+  })
+  on('fs.write', ($, e) => ({ deny: `ENOSPC: no space left on device, write '${e.path}'` }))
+  on('fs.list', ($, e) => {
+    throw new Error(`ENOENT: no such file or directory, scandir '${e.path}'`)
+  })
+  on('process.run', () => ({ value: { exitCode: 0, stdout: SKILL_SESSION, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }))
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
 test('rows drawn at once share one write of the file', async ($, on) => {
   const written: string[] = []
   host(on, { [TRANSCRIPT]: REPLY_SESSION }, 0, written)
