@@ -37,6 +37,7 @@ async function recordedTimestamp($: EngineInterface, transcript: string, kept: M
 export const register: Register = (on) => {
   // The session's transcript file: empty until the session starts, and for a session that keeps none.
   let transcript = ''
+  // The times read so far, as the transcript records them, by the id of their row: what the times file holds.
   const kept = new Map<string, string>()
   on('classic.SessionStart', ($, e, next) => {
     transcript = e.transcript_path

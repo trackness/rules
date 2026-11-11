@@ -99,12 +99,18 @@ test('the time sits one line down, beside the ⏺ under the blank line Claude Co
 const REPLY_ID = '8d4d70ff-4e29-4404-bc72-1641876dc44a'
 const REPLY = { text: 'The plugin-authoring skill is loaded.', isFirstOfReply: true }
 
+// The Skill session gone on: two minutes after the call, Claude replied.
+const REPLY_SESSION = SKILL_SESSION + transcript(assistant(REPLY_ID, '2026-11-10T09:32:41.970Z', { type: 'text', text: REPLY.text }))
+
+// The reply's row as the terminal draws it.
+function drawReplyRow($: Engine) {
+  return $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AssistantMessage', requestId: REPLY_ID, props: REPLY })
+}
+
 test('a reply row shows the time the transcript records for its text', async ($, on) => {
-  // The session went on: two minutes after the call, Claude replied.
-  const reply = assistant(REPLY_ID, '2026-11-10T09:32:41.970Z', { type: 'text', text: REPLY.text })
-  host(on, { [TRANSCRIPT]: SKILL_SESSION + transcript(reply) })
+  host(on, { [TRANSCRIPT]: REPLY_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AssistantMessage', requestId: REPLY_ID, props: REPLY })
+  const ui = await drawReplyRow($)
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:32:41.970Z')} `)
 })
 
@@ -182,11 +188,10 @@ test('a time read from the transcript is kept in a file in the transcript direct
 })
 
 test('the file keeps the time of every row read so far', async ($, on) => {
-  const reply = assistant(REPLY_ID, '2026-11-10T09:32:41.970Z', { type: 'text', text: REPLY.text })
-  const files: Record<string, string> = { [TRANSCRIPT]: SKILL_SESSION + transcript(reply) }
+  const files: Record<string, string> = { [TRANSCRIPT]: REPLY_SESSION }
   host(on, files)
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   await drawSkillRow($)
-  await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AssistantMessage', requestId: REPLY_ID, props: REPLY })
+  await drawReplyRow($)
   expect(files[TIMES]).toBe(`${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:32:41.970Z\n`)
 })
