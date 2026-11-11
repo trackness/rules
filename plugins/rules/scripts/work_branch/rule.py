@@ -2,10 +2,13 @@
 """Allow work only on a branch: a PreToolUse hook for the files Claude changes, and git's pre-commit hook for the commits Claude makes."""
 import json
 import os
-import shlex
 import subprocess
 import sys
 from pathlib import Path
+
+# Run by its path, a script can import only from its own folder, and git_hook.py is in the scripts folder above it.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import git_hook
 
 # shortcut: a shared branch with another name, such as trunk, is not kept free of work; read the remote's HEAD if a repository uses one
 SHARED_BRANCHES = ("main", "master", "develop")
@@ -31,20 +34,9 @@ def off_a_work_branch(directory):
 
 def register(env_file, stdout):
     """Make git run this script as the pre-commit hook in the Bash commands of the Claude Code session that owns env_file."""
-    if not env_file:
-        # Claude Code adds a SessionStart hook's stdout to Claude's context; Claude never sees its stderr.
-        print("The check that commits are made on a branch is not active: Claude Code gave this hook no CLAUDE_ENV_FILE to register it in.", file=stdout)
-        return
-    command = f"{shlex.quote(str(Path(__file__).resolve()))} pre-commit"  # git runs the command through a shell
-    # The form CONTRIBUTING prescribes: each entry goes after those already counted, so other rules' and the user's GIT_CONFIG_* entries stay,
-    # and the command comes before its event, because git ignores a command with no event but aborts on an event with no command.
-    with open(env_file, "a") as session_env:
-        session_env.write(
-            f"export GIT_CONFIG_KEY_${{GIT_CONFIG_COUNT:-0}}=hook.work-branch.command GIT_CONFIG_VALUE_${{GIT_CONFIG_COUNT:-0}}={shlex.quote(command)}\n"
-            "export GIT_CONFIG_COUNT=$((${GIT_CONFIG_COUNT:-0} + 1))\n"
-            "export GIT_CONFIG_KEY_${GIT_CONFIG_COUNT}=hook.work-branch.event GIT_CONFIG_VALUE_${GIT_CONFIG_COUNT}=pre-commit\n"
-            "export GIT_CONFIG_COUNT=$((GIT_CONFIG_COUNT + 1))\n"
-        )
+    git_hook.register(
+        env_file, stdout, "work-branch", "pre-commit", [Path(__file__).resolve(), "pre-commit"], "The check that commits are made on a branch"
+    )
 
 
 def pre_commit(stderr):

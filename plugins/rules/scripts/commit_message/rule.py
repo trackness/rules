@@ -2,9 +2,12 @@
 """Allow only Conventional Commits messages in the commits Claude makes."""
 import os
 import re
-import shlex
 import sys
 from pathlib import Path
+
+# Run by its path, a script can import only from its own folder, and git_hook.py is in the scripts folder above it.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import git_hook
 
 HEADER = r"(?:(?:fixup|squash|amend)! )*(?:feat|fix|docs|style|refactor|perf|test|build|ci|chore)(?:\([^()\s]+\))?!?: \S"
 
@@ -17,20 +20,7 @@ def conventional(message):
 
 def register(env_file, stdout):
     """Make git run this script as the commit-msg hook in the Bash commands of the Claude Code session that owns env_file."""
-    if not env_file:
-        # Claude Code adds a SessionStart hook's stdout to Claude's context; Claude never sees its stderr.
-        print("The Conventional Commits check is not active: Claude Code gave this hook no CLAUDE_ENV_FILE to register it in.", file=stdout)
-        return
-    command = shlex.quote(str(Path(__file__).resolve()))  # git runs the command through a shell
-    # Each entry goes after those already counted, so other rules' and the user's GIT_CONFIG_* entries stay. The command comes first:
-    # git ignores a command with no event, but aborts on an event with no command, as a shell that stops partway through would leave.
-    with open(env_file, "a") as session_env:
-        session_env.write(
-            f"export GIT_CONFIG_KEY_${{GIT_CONFIG_COUNT:-0}}=hook.conventional-commits.command GIT_CONFIG_VALUE_${{GIT_CONFIG_COUNT:-0}}={shlex.quote(command)}\n"
-            "export GIT_CONFIG_COUNT=$((${GIT_CONFIG_COUNT:-0} + 1))\n"
-            "export GIT_CONFIG_KEY_${GIT_CONFIG_COUNT}=hook.conventional-commits.event GIT_CONFIG_VALUE_${GIT_CONFIG_COUNT}=commit-msg\n"
-            "export GIT_CONFIG_COUNT=$((GIT_CONFIG_COUNT + 1))\n"
-        )
+    git_hook.register(env_file, stdout, "conventional-commits", "commit-msg", [Path(__file__).resolve()], "The Conventional Commits check")
 
 
 def main(message_file, stderr):

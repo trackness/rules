@@ -126,10 +126,9 @@ def test_registered_hook_accepts_conventional_commit(tmp_path):
 @pytest.mark.parametrize("shell", ["bash", pytest.param("zsh", marks=needs_zsh)])
 def test_registered_hook_runs_from_a_path_with_spaces_and_quotes(tmp_path, shell):
     """The plugin can be installed under such a path; the session's shell must still parse the env file, and git still run the script."""
-    script = tmp_path / "it's a \"plugin\"" / "rule.py"
-    script.parent.mkdir()
-    shutil.copy(SCRIPT, script)
-    result = commit_in_session(tmp_path, "Add login page", shell=shell, script=script)
+    scripts = tmp_path / "it's a \"plugin\"" / "scripts"
+    shutil.copytree(SCRIPT.parent.parent, scripts, ignore=shutil.ignore_patterns("__pycache__"))  # the rule imports git_hook.py from there
+    result = commit_in_session(tmp_path, "Add login page", shell=shell, script=scripts / SCRIPT.parent.name / "rule.py")
     assert "Rejected: the commit message does not follow Conventional Commits" in result.stderr
 
 

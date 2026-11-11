@@ -7,6 +7,10 @@ import shlex
 import sys
 from pathlib import Path
 
+# Run by its path, a script can import only from its own folder, and git_hook.py is in the scripts folder above it.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+import git_hook
+
 # shortcut: git after sudo or env options, such as sudo -u root git, is not checked; skip those options if Claude runs git that way
 COMMAND_PREFIXES = ("sudo", "env")
 ENVIRONMENT_ASSIGNMENT = r"[A-Za-z_]\w*="
@@ -74,20 +78,9 @@ def new_branch_names(cmd):
 
 def register(env_file, stdout):
     """Make git run this script as the pre-push hook in the Bash commands of the Claude Code session that owns env_file."""
-    if not env_file:
-        # Claude Code adds a SessionStart hook's stdout to Claude's context; Claude never sees its stderr.
-        print("The Conventional Branch check on pushes is not active: Claude Code gave this hook no CLAUDE_ENV_FILE to register it in.", file=stdout)
-        return
-    command = f"{shlex.quote(str(Path(__file__).resolve()))} pre-push"  # git runs the command through a shell
-    # Each entry goes after those already counted, so other rules' and the user's GIT_CONFIG_* entries stay. The command comes first:
-    # git ignores a command with no event, but aborts on an event with no command, as a shell that stops partway through would leave.
-    with open(env_file, "a") as session_env:
-        session_env.write(
-            f"export GIT_CONFIG_KEY_${{GIT_CONFIG_COUNT:-0}}=hook.conventional-branch.command GIT_CONFIG_VALUE_${{GIT_CONFIG_COUNT:-0}}={shlex.quote(command)}\n"
-            "export GIT_CONFIG_COUNT=$((${GIT_CONFIG_COUNT:-0} + 1))\n"
-            "export GIT_CONFIG_KEY_${GIT_CONFIG_COUNT}=hook.conventional-branch.event GIT_CONFIG_VALUE_${GIT_CONFIG_COUNT}=pre-push\n"
-            "export GIT_CONFIG_COUNT=$((GIT_CONFIG_COUNT + 1))\n"
-        )
+    git_hook.register(
+        env_file, stdout, "conventional-branch", "pre-push", [Path(__file__).resolve(), "pre-push"], "The Conventional Branch check on pushes"
+    )
 
 
 def new_remote_branches(push_lines):

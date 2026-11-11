@@ -236,11 +236,10 @@ def test_registered_hook_accepts_commit_on_a_work_branch(tmp_path):
 @needs_config_hooks
 def test_registered_hook_runs_from_a_path_with_spaces_and_quotes(tmp_path):
     """The plugin can be installed under such a path; the session's shell must still parse the env file, and git still run the script."""
-    script = tmp_path / "it's a \"plugin\"" / "rule.py"
-    script.parent.mkdir()
-    shutil.copy(SCRIPT, script)
+    scripts = tmp_path / "it's a \"plugin\"" / "scripts"
+    shutil.copytree(SCRIPT.parent.parent, scripts, ignore=shutil.ignore_patterns("__pycache__"))  # the rule imports git_hook.py from there
     repo = repo_on(tmp_path, "main")
-    result = git_in_session(tmp_path, repo, "commit", "--allow-empty", "-q", "-m", "feat: continue", script=script)
+    result = git_in_session(tmp_path, repo, "commit", "--allow-empty", "-q", "-m", "feat: continue", script=scripts / SCRIPT.parent.name / "rule.py")
     assert result.stderr.startswith("Rejected: work happens only on a branch")
 
 

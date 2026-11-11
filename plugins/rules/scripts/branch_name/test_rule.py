@@ -218,12 +218,11 @@ def test_registered_hook_refusal_says_how_to_rename_the_branch(tmp_path):
 @pytest.mark.parametrize("shell", ["bash", pytest.param("zsh", marks=needs_zsh)])
 def test_registered_hook_runs_from_a_path_with_spaces_and_quotes(tmp_path, shell):
     """The plugin can be installed under such a path; the session's shell must still parse the env file, and git still run the script."""
-    script = tmp_path / "it's a \"plugin\"" / "rule.py"
-    script.parent.mkdir()
-    shutil.copy(SCRIPT, script)
+    scripts = tmp_path / "it's a \"plugin\"" / "scripts"
+    shutil.copytree(SCRIPT.parent.parent, scripts, ignore=shutil.ignore_patterns("__pycache__"))  # the rule imports git_hook.py from there
     repo, _ = repo_with_remote(tmp_path)
     git("-C", repo, "branch", "Bad_Name")
-    result = git_in_session(tmp_path, repo, "push", "-q", "origin", "Bad_Name", shell=shell, script=script)
+    result = git_in_session(tmp_path, repo, "push", "-q", "origin", "Bad_Name", shell=shell, script=scripts / SCRIPT.parent.name / "rule.py")
     assert "Rejected: this push would create the remote branch Bad_Name," in result.stderr
 
 
