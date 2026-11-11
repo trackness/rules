@@ -239,6 +239,16 @@ test('a row in a session that has no transcript is left exactly as Claude Code d
 
 const TIMES = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a.times'
 
+test('a transcript whose name does not end in .jsonl is never written over, and its rows are left as Claude Code draws them', async ($, on) => {
+  // The times file's name is made from the transcript's by its .jsonl ending.
+  const unnamed = TRANSCRIPT.replace(/\.jsonl$/, '')
+  const files: Record<string, string> = { [unnamed]: SKILL_SESSION }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: unnamed })
+  const ui = await drawSkillRow($)
+  expect({ drawn: (await ui.drawn()).type, transcript: files[unnamed] }).toEqual({ drawn: 'engine', transcript: SKILL_SESSION })
+})
+
 test('a time read from the transcript is kept in a file in the transcript directory, as the transcript records it', async ($, on) => {
   const files: Record<string, string> = { [TRANSCRIPT]: SKILL_SESSION }
   host(on, files)

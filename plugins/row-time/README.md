@@ -44,7 +44,7 @@ The time of each row drawn is kept in a file beside the transcript, under the tr
 
 ## What is left as Claude Code draws it
 
-- Every row of a session that keeps no transcript.
+- Every row of a session that keeps no transcript, or whose transcript's name does not end in `.jsonl`, the ending the times file's name replaces, so the mod never writes over the transcript.
 - Everything drawn on a surface other than the terminal, such as the desktop app or VS Code.
 - What stands outside the transcript: the spinner, the band above the prompt, the lines under it, the status lines under the logo, a pane or a row a plugin places, a plugin's backdrop, and the dialog the AskUserQuestion tool opens.
 - A tool call's result, and the run-in-background hint under a running call, which stand under the call.

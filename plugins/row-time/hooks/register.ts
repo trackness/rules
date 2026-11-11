@@ -173,13 +173,14 @@ async function timesKept($: EngineInterface, transcript: string): Promise<Map<st
 const HELD_TRANSCRIPT = { plugin: 'row-time', key: 'transcript' } as const
 
 export const register: Register = (on) => {
-  // The session's transcript file: empty until the session starts, and for a session that keeps none.
+  // The session's transcript file: empty until the session starts, for a session that keeps none, and for one whose
+  // name lacks the .jsonl ending the times file's name is made from, which would make the transcript its times file.
   let transcript = ''
   const kept: Kept = { times: new Map(), written: Promise.resolve() }
   const reading: Reading = { bytesRead: new Map(), recorded: new Map() }
   // No .catch: Claude Code skips a hook that fails, and the session goes on as it would without the mod.
   on('classic.SessionStart', async ($, e, next) => {
-    transcript = e.transcript_path
+    transcript = e.transcript_path.endsWith('.jsonl') ? e.transcript_path : ''
     kept.times = await timesKept($, transcript)
     // Claude Code draws a resumed session's rows before it starts the session, while the transcript is not yet
     // known: they are drawn again now that it is.
