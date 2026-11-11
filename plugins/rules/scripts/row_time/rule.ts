@@ -49,15 +49,18 @@ async function transcriptsOf($: EngineInterface, transcript: string): Promise<st
 
 /** The timestamp a transcript file records for a row, or undefined where it holds no record of the row. */
 async function timestampIn($: EngineInterface, file: string, id: string): Promise<string | undefined> {
-  // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes. Claude Code aborts
-  // the read under way for a drawing it drops, which is no record found: the row is read again when next drawn.
-  for (let read = 0; ; ) {
-    const { stdout } = await $.process.run(['tail', '-n', `+${read + 1}`, file]).catch(() => ({ stdout: '' }))
+  // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes. Claude Code hands
+  // back only the first 4 MiB of what tail writes, so the file is read a stretch at a time, each from the line after
+  // the last. Claude Code aborts the read under way for a drawing it drops, which is no record found: the row is read
+  // again when next drawn.
+  for (let linesRead = 0; ; ) {
+    const { stdout } = await $.process.run(['tail', '-n', `+${linesRead + 1}`, file]).catch(() => ({ stdout: '' }))
+    // What follows the last line break is a line cut short, or nothing.
     const lines = stdout.split('\n').slice(0, -1)
     if (lines.length === 0) return undefined
     const record = lines.find((line) => recordsRow(line, id))
     if (record) return JSON.parse(record).timestamp
-    read += lines.length
+    linesRead += lines.length
   }
 }
 

@@ -25,6 +25,9 @@ function timeOfDay(timestamp: string): string {
   return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
 }
 
+// How much of what a command writes Claude Code 2.1.322 hands a plugin: the first 4 MiB, the rest dropped.
+const STDOUT_LIMIT = 4 * 1024 * 1024
+
 // The host beneath the plugin: a session that starts, and its files. A plugin's own file read refuses a file over
 // 4 MiB, which a transcript passes, so the files are read from a line on by tail. A write replaces a file whole.
 // Answers with the commands the plugin ran.
@@ -53,8 +56,7 @@ function host(on: On, files: Record<string, string>) {
       return { value: { exitCode: 1, stdout: '', stderr: `${String(command)}: ${String(path)}: No such file or directory\n`, isStdoutTruncated: false, isStderrTruncated: false } }
     }
     const stdout = text.split('\n').slice(Number(from) - 1).join('\n')
-    // Claude Code hands a plugin the first 4 MiB of what a command writes, and drops the rest.
-    return { value: { exitCode: 0, stdout: stdout.slice(0, 4194304), stderr: '', isStdoutTruncated: stdout.length > 4194304, isStderrTruncated: false } }
+    return { value: { exitCode: 0, stdout: stdout.slice(0, STDOUT_LIMIT), stderr: '', isStdoutTruncated: stdout.length > STDOUT_LIMIT, isStderrTruncated: false } }
   })
   return ran
 }
