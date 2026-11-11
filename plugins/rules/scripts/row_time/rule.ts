@@ -88,6 +88,7 @@ export const register: Register = (on) => {
   })
   on('ui.render', async ($, e, next) => {
     if (transcript === '' || OUTSIDE_THE_TRANSCRIPT.includes(e.component)) return next(e)
+    if (e.component === 'ToolUse' && e.props.tool === 'SubagentHandback') return next(e)
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
     const timestamp = await recordedTimestamp($, transcript, kept, id)
