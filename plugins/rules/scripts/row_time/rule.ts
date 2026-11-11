@@ -90,10 +90,11 @@ export const register: Register = (on) => {
     if (transcript === '' || OUTSIDE_THE_TRANSCRIPT.includes(e.component)) return next(e)
     // A subagent ends with a SubagentHandback call, for which Claude Code draws no row.
     if (e.component === 'ToolUse' && e.props.tool === 'SubagentHandback') return next(e)
+    const { Box, Text } = $.ui.resolve(e)
+    if (e.component === 'ToolResult') return h(Box, { flexDirection: 'row' }, h(Text, null, '      '), await next(e)) as RenderElement
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
     const timestamp = await recordedTimestamp($, transcript, kept, id)
-    const { Box, Text } = $.ui.resolve(e)
     const time = h(Text, { dimColor: true }, `${timestamp ? timeOfDay(timestamp) : NOT_YET} `)
     // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside the ⏺.
     return h(Box, { flexDirection: 'row' }, h(Box, { marginTop: 1 }, time), await next(e)) as RenderElement
