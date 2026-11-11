@@ -7,7 +7,7 @@ const NOT_YET = '--:--'
 const NO_TIME = '      '
 
 /** What Claude Code draws outside the transcript: the spinner, the band above the prompt and the lines under it. */
-const OUTSIDE_THE_TRANSCRIPT = ['Spinner', 'AbovePrompt', 'PromptHint', 'SessionMode']
+const OUTSIDE_THE_TRANSCRIPT = ['Spinner', 'AbovePrompt', 'PromptHint', 'SessionMode', 'InfoNotice']
 
 /** How long the rows wait to be drawn again after the conversation gains a row, in milliseconds. */
 const WRITE_WAIT_MS = 100
