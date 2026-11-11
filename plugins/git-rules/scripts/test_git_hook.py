@@ -1,5 +1,6 @@
 """Tests for git_hook.py, the registration every rule that git enforces shares. Run from the repo root: uv run pytest"""
 import io
+import json
 import os
 import shlex
 from pathlib import Path
@@ -40,6 +41,31 @@ def new_repo(tmp_path):
     repo = tmp_path / "repo"
     git("init", "-q", repo)
     return repo
+
+
+def test_test_subprocesses_get_a_minimal_environment(tmp_path, monkeypatch):
+    """A variable of the user's, such as a secret, reaches no subprocess a test starts, where pytest would print it when the call fails."""
+    monkeypatch.setenv("TEST_MARKER", "leaked")
+    script = tmp_path / "hook.sh"
+    script.write_text('#!/bin/sh\necho "${TEST_MARKER-absent}" >> "$CLAUDE_ENV_FILE"\n')
+    script.chmod(0o755)
+    assert start_session(tmp_path / "session.env", script).read_text() == "absent\n"
+    assert set(GIT_ENV) == {
+        "PATH", "GIT_CONFIG_GLOBAL", "GIT_CONFIG_NOSYSTEM", "GIT_AUTHOR_NAME", "GIT_AUTHOR_EMAIL", "GIT_COMMITTER_NAME", "GIT_COMMITTER_EMAIL",
+    }
+
+
+def test_each_wired_command_is_an_executable_file_and_session_start_runs_the_registered_rules():
+    """hooks.json names scripts that exist, which `claude plugin validate` does not check."""
+    plugin = SCRIPTS.parent
+    hooks = json.loads((plugin / "hooks" / "hooks.json").read_text())["hooks"]
+    commands = {
+        event: [shlex.split(hook["command"].replace("${CLAUDE_PLUGIN_ROOT}", str(plugin)))[0] for group in groups for hook in group["hooks"]]
+        for event, groups in hooks.items()
+    }
+    for command in sum(commands.values(), []):
+        assert os.access(command, os.X_OK) and Path(command).is_file(), command
+    assert commands["SessionStart"] == [str(SCRIPTS / rule / "rule.py") for rule in REGISTERED]
 
 
 @pytest.mark.parametrize("shell", ["bash", pytest.param("zsh", marks=needs_zsh)])
