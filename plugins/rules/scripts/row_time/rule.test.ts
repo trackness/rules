@@ -419,6 +419,15 @@ test('a status line under the logo, which the transcript does not record, is lef
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })
 
+test('the reply Claude Code itself adds to a forked session, which it draws nothing for, shows no time', async ($, on) => {
+  const added = assistant('2bb86f3e-d64b-41c1-903e-3d13a2707994', '2026-11-10T09:40:20.460Z', { type: 'text', text: 'No response requested.' })
+  host(on, { [TRANSCRIPT]: SKILL_SESSION + transcript(added) })
+  await $.classic.SessionStart({ source: 'resume', transcript_path: TRANSCRIPT })
+  const props = { text: 'No response requested.', isFirstOfReply: true }
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AssistantMessage', requestId: '2bb86f3e-d64b-41c1-903e-3d13a2707994', props })
+  expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
+
 test('the file keeps the time of every row drawn at once', async ($, on) => {
   const files: Record<string, string> = { [TRANSCRIPT]: REPLY_SESSION }
   host(on, files)
