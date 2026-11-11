@@ -37,15 +37,20 @@ function keptTimes(text: string): Map<string, string> {
  */
 async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, id: string): Promise<string | undefined> {
   if (kept.has(id)) return kept.get(id)
-  // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
-  const { stdout } = await $.process.run(['tail', '-n', '+1', transcript])
-  const record = stdout.split('\n').find((line) => recordsRow(line, id))
-  const timestamp: string | undefined = record && JSON.parse(record).timestamp
-  if (timestamp) {
-    kept.set(id, timestamp)
-    await $.fs.write(timesFile(transcript), timesText(kept))
+  const subagents = transcript.replace(/\.jsonl$/, '/subagents')
+  const theirs = (await $.fs.list(subagents).catch(() => [])).map((entry) => `${subagents}/${entry.name}`)
+  for (const file of [transcript, ...theirs]) {
+    // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
+    const { stdout } = await $.process.run(['tail', '-n', '+1', file])
+    const record = stdout.split('\n').find((line) => recordsRow(line, id))
+    const timestamp: string | undefined = record && JSON.parse(record).timestamp
+    if (timestamp) {
+      kept.set(id, timestamp)
+      await $.fs.write(timesFile(transcript), timesText(kept))
+      return timestamp
+    }
   }
-  return timestamp
+  return undefined
 }
 
 export const register: Register = (on) => {
