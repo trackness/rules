@@ -1,4 +1,4 @@
-import type { Register, RenderElement } from 'claude-code'
+import type { EngineInterface, Register, RenderElement } from 'claude-code'
 
 /** What a row shows in place of its time, until the transcript holds one. */
 const NOT_YET = '--:--'
@@ -16,6 +16,21 @@ function recordsRow(line: string, id: string): boolean {
   return line.includes(`"id":"${id}"`) || line.includes(`"uuid":"${id}"`)
 }
 
+/** The file that keeps the times read from a transcript: beside the transcript, under its name. */
+function timesFile(transcript: string): string {
+  return transcript.replace(/jsonl$/, 'times')
+}
+
+/** The timestamp the transcript records for a row, kept in the times file once read; undefined until the transcript holds the row. */
+async function recordedTimestamp($: EngineInterface, transcript: string, id: string): Promise<string | undefined> {
+  // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
+  const { stdout } = await $.process.run(['tail', '-n', '+1', transcript])
+  const record = stdout.split('\n').find((line) => recordsRow(line, id))
+  const timestamp: string | undefined = record && JSON.parse(record).timestamp
+  if (timestamp) await $.fs.write(timesFile(transcript), `${id} ${timestamp}\n`)
+  return timestamp
+}
+
 export const register: Register = (on) => {
   // The session's transcript file: empty until the session starts, and for a session that keeps none.
   let transcript = ''
@@ -31,15 +46,11 @@ export const register: Register = (on) => {
   })
   on('ui.render', async ($, e, next) => {
     if (transcript === '') return next(e)
-    // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
-    const { stdout } = await $.process.run(['tail', '-n', '+1', transcript])
+    // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
-    const record = stdout.split('\n').find((line) => recordsRow(line, id))
+    const timestamp = await recordedTimestamp($, transcript, id)
     const { Box, Text } = $.ui.resolve(e)
-    const timestamp: string | undefined = record && JSON.parse(record).timestamp
-    if (timestamp) await $.fs.write(transcript.replace(/jsonl$/, 'times'), `${id} ${timestamp}\n`)
-    const shown = timestamp ? timeOfDay(timestamp) : NOT_YET
-    const time = h(Text, { dimColor: true }, `${shown} `)
+    const time = h(Text, { dimColor: true }, `${timestamp ? timeOfDay(timestamp) : NOT_YET} `)
     // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside the ⏺.
     return h(Box, { flexDirection: 'row' }, h(Box, { marginTop: 1 }, time), await next(e)) as RenderElement
   })
