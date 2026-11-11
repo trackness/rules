@@ -21,7 +21,20 @@ function timesFile(transcript: string): string {
   return transcript.replace(/jsonl$/, 'times')
 }
 
-/** The timestamp the transcript records for a row, kept in the times file once read; undefined until the transcript holds the row. */
+/** The text of a times file: a line for each time kept, the id of its row, then the time as the transcript records it. */
+function timesText(kept: Map<string, string>): string {
+  return [...kept].map(([id, timestamp]) => `${id} ${timestamp}\n`).join('')
+}
+
+/** The times a times file's text keeps, by the id of their row. */
+function keptTimes(text: string): Map<string, string> {
+  return new Map(text.split('\n').filter(Boolean).map((line) => line.split(' ') as [string, string]))
+}
+
+/**
+ * The timestamp the transcript records for a row: the one kept, or else the one read from the transcript, which is
+ * then kept, in the times file too. Undefined until the transcript holds the row.
+ */
 async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, id: string): Promise<string | undefined> {
   if (kept.has(id)) return kept.get(id)
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
@@ -30,7 +43,7 @@ async function recordedTimestamp($: EngineInterface, transcript: string, kept: M
   const timestamp: string | undefined = record && JSON.parse(record).timestamp
   if (timestamp) {
     kept.set(id, timestamp)
-    await $.fs.write(timesFile(transcript), [...kept].map(([row, at]) => `${row} ${at}\n`).join(''))
+    await $.fs.write(timesFile(transcript), timesText(kept))
   }
   return timestamp
 }
@@ -42,8 +55,7 @@ export const register: Register = (on) => {
   let kept = new Map<string, string>()
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
-    const lines = (await $.fs.read(timesFile(transcript)).catch(() => '')).split('\n').filter(Boolean)
-    kept = new Map(lines.map((line) => line.split(' ') as [string, string]))
+    kept = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
     return next(e)
   })
   on('session.append', async ($, e, next) => {
