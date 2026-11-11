@@ -6,7 +6,10 @@ const NOT_YET = '--:--'
 /** As wide as a time and the space after it: what stands left of a part of a row that carries no time. */
 const NO_TIME = '      '
 
-/** What Claude Code draws outside the transcript: the spinner, the band above the prompt and the lines under it. */
+/**
+ * What Claude Code draws outside the transcript, and so records no time for: the spinner, the band above the prompt,
+ * the lines under it, and the status lines under the logo.
+ */
 const OUTSIDE_THE_TRANSCRIPT = ['Spinner', 'AbovePrompt', 'PromptHint', 'SessionMode', 'InfoNotice']
 
 /** How long the rows wait to be drawn again after the conversation gains a row, in milliseconds. */
