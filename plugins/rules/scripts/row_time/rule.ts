@@ -100,7 +100,8 @@ export const register: Register = (on) => {
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
     const timestamp = await recordedTimestamp($, transcript, kept, id)
     const time = h(Text, { dimColor: true }, `${timestamp ? timeOfDay(timestamp) : NOT_YET} `)
-    // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside the ⏺.
+    // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside
+    // the ⏺. Above a subagent's prompt from main it draws its "From main" label in place of the blank line.
     const isFromMain = e.component === 'UserMessage' && e.props.origin.kind === 'coordinator'
     return h(Box, { flexDirection: 'row' }, h(Box, { marginTop: isFromMain ? 0 : 1 }, time), await next(e)) as RenderElement
   })
