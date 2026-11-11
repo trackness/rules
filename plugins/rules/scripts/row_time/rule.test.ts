@@ -294,3 +294,11 @@ test('the prompt a subagent has from main, which Claude Code draws under a label
   const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'UserMessage', requestId: '8192dc5a-249e-49bc-b50e-74caa4f7c02d', props })
   expect(await ui.drawn()).toMatchObject({ children: [{ type: 'Box', props: { marginTop: 0 } }, {}] })
 })
+
+test('a slash command\'s output, which Claude Code draws under the command\'s own untimed line, is left as it draws it', async ($, on) => {
+  host(on, { [TRANSCRIPT]: SKILL_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const output = { command: 'tasks', args: '', text: 'Viewing agent', isErrored: false }
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'CommandOutput', requestId: 'b19f5b34-dba6-4810-9b4a-df2a3c88fa09', props: output })
+  expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
