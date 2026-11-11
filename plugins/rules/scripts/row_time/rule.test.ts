@@ -180,3 +180,13 @@ test('a time read from the transcript is kept in a file in the transcript direct
   await drawSkillRow($)
   expect(files[TIMES]).toBe(`${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n`)
 })
+
+test('the file keeps the time of every row read so far', async ($, on) => {
+  const reply = assistant(REPLY_ID, '2026-11-10T09:32:41.970Z', { type: 'text', text: REPLY.text })
+  const files: Record<string, string> = { [TRANSCRIPT]: SKILL_SESSION + transcript(reply) }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  await drawSkillRow($)
+  await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AssistantMessage', requestId: REPLY_ID, props: REPLY })
+  expect(files[TIMES]).toBe(`${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:32:41.970Z\n`)
+})
