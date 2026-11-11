@@ -2,18 +2,16 @@
 import io
 import json
 import os
-import shlex
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from ..git_testing import EXISTING_GIT_CONFIG, GIT_ENV, git, needs_config_hooks, needs_zsh, run_in_session, start_session
+from ..git_testing import git, needs_config_hooks, needs_zsh, run_in_session
 from .rule import conventional, main, new_branch_names
 
 SCRIPT = Path(__file__).resolve().parent / "rule.py"
-COMMIT_MESSAGE_RULE = SCRIPT.parent.parent / "commit_message" / "rule.py"
 
 
 def tool_call(cmd):
@@ -275,26 +273,15 @@ def test_repository_pre_push_hook_still_runs_after_a_refusal(tmp_path):
 @pytest.mark.parametrize("command", [
     pytest.param(lambda repo, remote: ["git", "-C", repo, "push", "-q", "--no-verify", "origin", "Bad_Name"], id="no_verify"),
     pytest.param(lambda repo, remote: ["git", "-C", repo, "send-pack", remote, "Bad_Name"], id="send_pack"),
-    pytest.param(lambda repo, remote: ["git", "-C", repo, "-c", "hook.conventional-branch.enabled=false", "push", "-q", "origin", "Bad_Name"], id="enabled_false"),
-    pytest.param(lambda repo, remote: ["git", "-C", repo, "-c", "hook.conventional-branch.event=", "push", "-q", "origin", "Bad_Name"], id="empty_event"),
-    pytest.param(lambda repo, remote: ["env", "GIT_CONFIG_COUNT=0", "git", "-C", repo, "push", "-q", "origin", "Bad_Name"], id="git_config_count_0"),
-    pytest.param(lambda repo, remote: ["env", "-i", f"PATH={os.environ['PATH']}", "git", "-C", repo, "push", "-q", "origin", "Bad_Name"], id="env_i"),
 ])
 def test_ways_past_the_pre_push_check_the_readme_lists(tmp_path, command):
-    """Each command gets an unconventional branch onto the remote despite the registered hook, as the README's Not checked list says."""
+    """Each command gets an unconventional branch onto the remote despite the registered hook, as the README's Not checked list says.
+
+    The ways past every git rule, such as turning the hook off by its name, are tested once, in test_git_hook.py.
+    """
     repo, remote = repo_with_remote(tmp_path)
     git("-C", repo, "branch", "Bad_Name")
     assert run_in_session(tmp_path, SCRIPT, *command(repo, remote)).returncode == 0
-    assert remote_branches(remote) == ["Bad_Name"]
-
-
-@needs_config_hooks
-def test_repository_config_can_turn_the_pre_push_check_off(tmp_path):
-    """The README lists a repository's or user's hook.conventional-branch.enabled false among the ways past the check."""
-    repo, remote = repo_with_remote(tmp_path)
-    git("-C", repo, "config", "hook.conventional-branch.enabled", "false")
-    git("-C", repo, "branch", "Bad_Name")
-    assert git_in_session(tmp_path, repo, "push", "-q", "origin", "Bad_Name").returncode == 0
     assert remote_branches(remote) == ["Bad_Name"]
 
 
@@ -322,23 +309,6 @@ def test_pre_push_reads_a_local_ref_typed_with_spaces(tmp_path):
     assert result.returncode == 1 and "Rejected: this push would create the remote branch Bad," in result.stderr
 
 
-@needs_config_hooks
-def test_registration_cut_short_leaves_git_working(tmp_path):
-    """A shell can stop partway through the env file, such as at a line it cannot parse; what it has counted by then must leave git working."""
-    repo, remote = repo_with_remote(tmp_path)
-    git("-C", repo, "branch", "feature/add-login")
-    env_file = start_session(tmp_path / "session.env", SCRIPT)
-    env_file.write_text("".join(env_file.read_text().splitlines(keepends=True)[:2]))  # the first entry, and the count that takes it in
-    result = subprocess.run(
-        ["bash", "-c", '. "$1" && shift && git -C "$@"', "_", env_file, repo, "push", "-q", "origin", "feature/add-login"],
-        env=GIT_ENV,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stderr
-    assert remote_branches(remote) == ["feature/add-login"]
-
-
 def test_session_start_without_env_file_tells_claude_the_push_check_is_inactive():
     """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook.
 
@@ -348,22 +318,3 @@ def test_session_start_without_env_file_tells_claude_the_push_check_is_inactive(
     result = subprocess.run([SCRIPT], input=json.dumps({"hook_event_name": "SessionStart", "source": "startup"}), env=env, capture_output=True, text=True)
     assert result.returncode == 0
     assert len(result.stdout.splitlines()) == 1 and "not active" in result.stdout
-
-
-@pytest.mark.parametrize("shell", ["bash", pytest.param("zsh", marks=needs_zsh)])
-@pytest.mark.parametrize("branch_rule_first", [False, True], ids=["commit_rule_first", "branch_rule_first"])
-def test_both_git_rules_register_beside_existing_git_config(tmp_path, shell, branch_rule_first):
-    """Claude Code runs both rules' SessionStart hooks, each with its own env file, and sources the files one after another in every Bash command."""
-    env_files = [start_session(tmp_path / f"{rule.parent.name}.env", rule) for rule in (COMMIT_MESSAGE_RULE, SCRIPT)]
-    if branch_rule_first:
-        env_files.reverse()
-    result = subprocess.run(
-        [shell, "-c", '. "$1" && . "$2" && git config --list --show-scope', "_", *env_files], env={**GIT_ENV, **EXISTING_GIT_CONFIG}, capture_output=True, text=True
-    )
-    assert sorted(line for line in result.stdout.splitlines() if line.startswith("command\t")) == sorted([
-        "command\ttest.kept=yes",
-        "command\thook.conventional-commits.event=commit-msg",
-        f"command\thook.conventional-commits.command={shlex.quote(str(COMMIT_MESSAGE_RULE))}",
-        "command\thook.conventional-branch.event=pre-push",
-        f"command\thook.conventional-branch.command={shlex.quote(str(SCRIPT))} pre-push",
-    ])

@@ -1,15 +1,14 @@
 """Tests for "Conventional Commits messages". Run from the repo root: uv run pytest"""
 import io
 import os
-import shlex
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from ..git_testing import EXISTING_GIT_CONFIG, GIT_ENV, git, needs_config_hooks, needs_zsh, run_in_session
-from .rule import conventional, main, register
+from ..git_testing import git, needs_config_hooks, needs_zsh, run_in_session
+from .rule import conventional, main
 
 SCRIPT = Path(__file__).resolve().parent / "rule.py"
 
@@ -137,58 +136,14 @@ def test_repository_commit_msg_hook_still_runs_after_this_one(tmp_path):
     pytest.param(lambda repo: ["git", "-C", repo, "revert", "--no-edit", "HEAD"], id="revert"),
     pytest.param(lambda repo: ["git", "-C", repo, "cherry-pick", "side"], id="cherry_pick"),
     pytest.param(lambda repo: ["git", "-C", repo, "commit-tree", "HEAD^{tree}", "-m", "WIP"], id="commit_tree"),
-    pytest.param(lambda repo: ["git", "-C", repo, "-c", "hook.conventional-commits.enabled=false", "commit", "--allow-empty", "-q", "-m", "WIP"], id="enabled_false"),
-    pytest.param(lambda repo: ["git", "-C", repo, "-c", "hook.conventional-commits.event=", "commit", "--allow-empty", "-q", "-m", "WIP"], id="empty_event"),
-    pytest.param(lambda repo: ["env", "GIT_CONFIG_COUNT=0", "git", "-C", repo, "commit", "--allow-empty", "-q", "-m", "WIP"], id="git_config_count_0"),
-    pytest.param(
-        lambda repo: ["env", "-i", f"PATH={os.environ['PATH']}", "git", "-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "--allow-empty", "-q", "-m", "WIP"],
-        id="env_i",
-    ),
 ])
 def test_ways_past_the_commit_msg_check_the_readme_lists(tmp_path, command):
-    """Each command makes a commit whose message is not conventional despite the registered hook, as the README's Not checked list says."""
+    """Each command makes a commit whose message is not conventional despite the registered hook, as the README's Not checked list says.
+
+    The ways past every git rule, such as turning the hook off by its name, are tested once, in test_git_hook.py.
+    """
     repo = repo_with_side_branch(tmp_path)
     assert run_in_session(tmp_path, SCRIPT, *command(repo)).returncode == 0
-
-
-@needs_config_hooks
-def test_repository_config_can_turn_the_commit_msg_check_off(tmp_path):
-    """The README lists a repository's or user's hook.conventional-commits.enabled false among the ways past the check."""
-    repo = repo_with_side_branch(tmp_path)
-    git("-C", repo, "config", "hook.conventional-commits.enabled", "false")
-    assert run_in_session(tmp_path, SCRIPT, "git", "-C", repo, "commit", "--allow-empty", "-q", "-m", "WIP").returncode == 0
-
-
-@pytest.mark.parametrize("shell", ["bash", pytest.param("zsh", marks=needs_zsh)])
-def test_registration_keeps_git_config_already_in_the_session(tmp_path, shell):
-    env_file = tmp_path / "session.env"
-    env_file.touch()
-    register(str(env_file), io.StringIO())
-    result = subprocess.run(
-        [shell, "-c", '. "$1" && git config --list --show-scope', "_", env_file], env={**GIT_ENV, **EXISTING_GIT_CONFIG}, capture_output=True, text=True
-    )
-    assert [line for line in result.stdout.splitlines() if line.startswith("command\t")] == [
-        "command\ttest.kept=yes",
-        f"command\thook.conventional-commits.command={shlex.quote(str(SCRIPT))}",
-        "command\thook.conventional-commits.event=commit-msg",
-    ]
-
-
-@needs_config_hooks
-def test_registration_cut_short_leaves_git_working(tmp_path):
-    """A shell can stop partway through the env file, such as at a line it cannot parse; what it has counted by then must leave git working."""
-    env_file, repo = tmp_path / "session.env", tmp_path / "repo"
-    env_file.touch()
-    register(str(env_file), io.StringIO())
-    env_file.write_text("".join(env_file.read_text().splitlines(keepends=True)[:2]))  # the first entry, and the count that takes it in
-    subprocess.run(["git", "init", "-q", str(repo)], env=GIT_ENV, check=True)
-    result = subprocess.run(
-        ["bash", "-c", '. "$1" && git -C "$2" commit --allow-empty -q -m "$3"', "_", env_file, repo, "feat: add login page"],
-        env=GIT_ENV,
-        capture_output=True,
-        text=True,
-    )
-    assert result.returncode == 0, result.stderr
 
 
 def test_session_start_without_env_file_tells_claude_the_check_is_inactive():

@@ -33,7 +33,13 @@ def start_session(env_file, script):
     return env_file
 
 
+def run_with_env_files(env_files, *command, shell="bash", env=GIT_ENV):
+    """Run the command as Claude's Bash tool would, after sourcing the session's env files one after another."""
+    sources = " && ".join(f'. "${number}"' for number in range(1, len(env_files) + 1))
+    script = f'{sources} && shift {len(env_files)} && "$@"'
+    return subprocess.run([shell, "-c", script, "_", *env_files, *map(str, command)], env=env, capture_output=True, text=True)
+
+
 def run_in_session(tmp_path, script, *command, shell="bash"):
     """Start a session whose SessionStart hook is script, then run the command as Claude's Bash tool would, with the env file sourced."""
-    session_env = start_session(tmp_path / "session.env", script)
-    return subprocess.run([shell, "-c", '. "$1" && shift && "$@"', "_", session_env, *map(str, command)], env=GIT_ENV, capture_output=True, text=True)
+    return run_with_env_files([start_session(tmp_path / "session.env", script)], *command, shell=shell)
