@@ -153,3 +153,11 @@ test('once the transcript has the time, the row is redrawn in place with it', as
   await clock.advance(1000)
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
+
+test('a row in a session that has no transcript is left exactly as Claude Code draws it', async ($, on) => {
+  host(on, {})
+  // A session that keeps no transcript starts with an empty transcript path.
+  await $.classic.SessionStart({ source: 'startup', transcript_path: '' })
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+  expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
