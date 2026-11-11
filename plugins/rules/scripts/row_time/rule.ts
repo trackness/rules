@@ -64,13 +64,14 @@ async function timestampIn($: EngineInterface, file: string, linesRead: Map<stri
   // again when next drawn.
   for (;;) {
     const read = linesRead.get(file) ?? 0
-    const { stdout } = await $.process.run(['tail', '-n', `+${read + 1}`, file]).catch(() => ({ stdout: '' }))
+    const { stdout, isStdoutTruncated } = await $.process.run(['tail', '-n', `+${read + 1}`, file]).catch(() => ({ stdout: '', isStdoutTruncated: false }))
     // What follows the last line break is a line cut short, or nothing.
     const lines = stdout.split('\n').slice(0, -1)
     if (lines.length === 0) return undefined
     for (const line of lines) noteTimes(line, recorded)
     linesRead.set(file, read + lines.length)
     if (recorded.has(id)) return recorded.get(id)
+    if (!isStdoutTruncated) return undefined
   }
 }
 
