@@ -3,9 +3,6 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 /** What a row shows in place of its time, until the transcript holds one. */
 const NOT_YET = '--:--'
 
-/** As wide as a time and the space after it: what stands left of a part of a row that carries no time. */
-const NO_TIME = '      '
-
 /**
  * What Claude Code draws outside the transcript, and so records no time for: the spinner, the band above the prompt,
  * the lines under it, and the status lines under the logo.
@@ -180,16 +177,21 @@ export const register: Register = (on) => {
     if (e.component === 'AssistantMessage' && e.props.text === ADDED_REPLY) return next(e)
     // A slash command's output stands under the command's own line, which Claude Code hands no plugin to draw.
     if (e.component === 'CommandOutput') return next(e)
+    // A result is part of its call's row: it stands under the call, which carries the time.
+    if (e.component === 'ToolResult') return next(e)
     const { Box, Text } = $.ui.resolve(e)
-    // A result is part of its call's row: it moves right with the call, and the call carries the time.
-    if (e.component === 'ToolResult') return h(Box, { flexDirection: 'row' }, h(Text, null, NO_TIME), await next(e)) as RenderElement
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
     const timestamp = await recordedTimestamp($, transcript, kept, reading, id)
     const time = h(Text, { dimColor: true }, `${timestamp ? timeOfDay(timestamp) : NOT_YET} `)
-    // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside
-    // the ⏺. Above a subagent's prompt from main it draws its "From main" label in place of the blank line.
+    const row = await next(e)
+    // Claude Code sizes what it draws in a row from the terminal's width, not from the room the row has, so the time
+    // takes none of the row's columns: drawn after the row, it is painted over it, on the blank line Claude Code draws
+    // directly above the row's ⏺. Above a subagent's prompt from main it draws its "From main" label in place of that
+    // blank line, so that time has a line of its own, above the label.
     const isFromMain = e.component === 'UserMessage' && e.props.origin.kind === 'coordinator'
-    return h(Box, { flexDirection: 'row' }, h(Box, { marginTop: isFromMain ? 0 : 1 }, time), await next(e)) as RenderElement
+    const parts = isFromMain ? [time, row] : [row, h(Box, { position: 'absolute', top: 0, left: 0 }, time)]
+    // A blank line of the mod's own keeps the row and its time apart from what is drawn before them.
+    return h(Box, { flexDirection: 'column', marginTop: 1 }, ...parts) as RenderElement
   })
 }

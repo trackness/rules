@@ -110,9 +110,9 @@ test('a tool-call row shows the time the transcript records for its call', async
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
 
-test('the time stands to the left of the row Claude Code draws', async ($, on) => {
+test('the time takes no columns from the row Claude Code draws: the row stands alone in a column, and the time is drawn after it, over it', async ($, on) => {
   const ui = await skillRow($, on)
-  expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'row' }, children: [{}, { type: 'engine' }] })
+  expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'column' }, children: [{ type: 'engine' }, { type: 'Box', props: { position: 'absolute' } }] })
 })
 
 test('the time is dim', async ($, on) => {
@@ -120,9 +120,15 @@ test('the time is dim', async ($, on) => {
   expect(await ui.find({ type: 'Text' })).toMatchObject({ props: { dimColor: true } })
 })
 
-test('the time sits one line down, beside the ⏺ under the blank line Claude Code draws above a row', async ($, on) => {
+test('the time stands at the left of the blank line Claude Code draws above a row, directly above its ⏺', async ($, on) => {
   const ui = await skillRow($, on)
-  expect(await ui.drawn()).toMatchObject({ children: [{ type: 'Box', props: { marginTop: 1 } }, {}] })
+  const atTheLeftOfTheTopLine = expect.objectContaining({ type: 'Box', props: expect.objectContaining({ position: 'absolute', top: 0, left: 0 }) })
+  expect(await ui.drawn()).toMatchObject({ children: expect.arrayContaining([atTheLeftOfTheTopLine]) })
+})
+
+test('a blank line stands above the time, setting the row and its time apart from what is drawn before them', async ($, on) => {
+  const ui = await skillRow($, on)
+  expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { marginTop: 1 } })
 })
 
 const REPLY_ID = '8d4d70ff-4e29-4404-bc72-1641876dc44a'
@@ -297,22 +303,22 @@ test('a subagent\'s handback call, which Claude Code draws nothing for, shows no
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })
 
-test('a tool call\'s result stays under its call, moved right by the width of a time, and shows no time of its own', async ($, on) => {
+test('a tool call\'s result, which shows no time of its own, is left as Claude Code draws it, under its call', async ($, on) => {
   host(on, { [TRANSCRIPT]: SKILL_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const result = { tool_use_id: SKILL_CALL.tool_use_id, tool: 'Skill', output: SKILL_CALL.output, isErrored: false, isExpanded: false }
   const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolResult', requestId: SKILL_CALL.tool_use_id, props: result })
-  expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'row' }, children: [{ type: 'Text', children: ['      '] }, { type: 'engine' }] })
+  expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })
 
-test('the prompt a subagent has from main, which Claude Code draws under a label and not a blank line, has its time on its first line', async ($, on) => {
+test('the prompt a subagent has from main, which Claude Code draws under a label and not a blank line, has its time on a line of its own above the label, under a blank line', async ($, on) => {
   const subagent = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a/subagents/agent-ae990d03dc2e2a409.jsonl'
   const prompt = user('8192dc5a-249e-49bc-b50e-74caa4f7c02d', '2026-11-10T10:01:40.987Z', 'Run the Bash command `echo hi` and then reply done.')
   host(on, { [TRANSCRIPT]: SKILL_SESSION, [subagent]: transcript(prompt) })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const props = { text: 'Run the Bash command `echo hi` and then reply done.', origin: { kind: 'coordinator' }, isExpanded: false } as const
   const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'UserMessage', requestId: '8192dc5a-249e-49bc-b50e-74caa4f7c02d', props })
-  expect(await ui.drawn()).toMatchObject({ children: [{ type: 'Box', props: { marginTop: 0 } }, {}] })
+  expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'column', marginTop: 1 }, children: [{ type: 'Text' }, { type: 'engine' }] })
 })
 
 test('a slash command\'s output, which Claude Code draws under the command\'s own untimed line, is left as it draws it', async ($, on) => {

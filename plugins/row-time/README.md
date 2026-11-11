@@ -1,19 +1,32 @@
 # Row times
 
-Shows a dim `HH:MM` to the left of each row of the terminal transcript, on the line of the row's `⏺`:
+Shows a dim `HH:MM` at the left of the line directly above each row's `⏺` in the terminal transcript, under a blank line that sets the row and its time apart from what is drawn before them:
 
-    09:30 ⏺ Skill(plugin-authoring)
+```text
+⏺ I'll load the skill.
+
+09:30
+⏺ Skill(plugin-authoring)
+```
 
 It is a mod: it changes what Claude Code draws, and blocks nothing.
 
 ## What gets a time
 
-- A prompt, a reply and a tool call, each on its own first line.
+- A prompt, a reply and a tool call.
 - A run of tool calls that the transcript folds into one line, which shows the time of its first call.
 - The other rows the transcript records, such as the line that closes a turn and the notices about a background agent.
 - A subagent's rows, in the subagent's own view, read from the subagent's own transcript.
 
-A tool call's result carries no time of its own: it moves right with its call, so it stays under it.
+A tool call's result carries no time of its own: it stands under its call, which carries the time.
+
+## Where the time stands
+
+Claude Code draws a blank line above each row, as part of the row, directly above the row's `⏺`, and the time stands at the left of that line. It is drawn over the row, after it, so it takes none of the row's columns. That matters because Claude Code sizes what it draws in a row from the terminal's width, not from the room the row has: a time drawn beside a row would leave the row a few columns short, and a wide Markdown table in a reply would then wrap every one of its lines.
+
+Above the time the mod adds a blank line of its own, so a row and its time stand apart from whatever is drawn before them. Each timed row therefore takes one line more than Claude Code draws for it; a tool call's result, and every row left as Claude Code draws it, takes no more.
+
+Above a subagent's prompt from main, Claude Code draws its "From main" label in place of the blank line, where the time would cover the label's start. That prompt's time has a line of its own instead, above the label, at its left, under the blank line the mod adds, so the label and the time are both whole; that row takes two lines more than Claude Code draws for it.
 
 ## Where the time comes from
 
@@ -31,6 +44,7 @@ The time of each row drawn is kept in a file beside the transcript, under the tr
 
 - Every row of a session that keeps no transcript.
 - What stands outside the transcript: the spinner, the band above the prompt, the lines under it, and the status lines under the logo.
+- A tool call's result, which stands under its call.
 - A slash command's output, which stands under the command's own line, a line Claude Code gives no mod to draw.
 - A shell command typed at the prompt with `!`, and its output: Claude Code gives a mod neither to draw.
 - A subagent's closing `SubagentHandback` call, for which Claude Code draws no row.
@@ -52,8 +66,10 @@ In one run of Claude Code, each line of a transcript is read once, however long 
 
 Built and run against Claude Code 2.1.322. What the mod does not yet do right:
 
-- **A reply in the ctrl+o view.** Claude Code draws its own time and model on a line above each reply there, in place of the blank line it draws in the normal view, and tells a mod nothing of it, so the reply's time lands one line below its `⏺`. Claude Code's code draws the same line above a reply in the normal view while its `showMessageTimestamps` setting is on. A fullscreen session without `--verbose` shows it.
-- **A run of tool calls drawn unfolded.** Under `--verbose`, and in the ctrl+o view of the non-fullscreen screen, Claude Code draws a run's calls as rows of their own inside the run. The run and its first call then each carry a time, two on one line. A fullscreen session without `--verbose` does not show it.
+- **A reply in the ctrl+o view.** Claude Code draws its own time and model on a line above each reply there, in place of the blank line it draws in the normal view, and tells a mod nothing of it, so the mod's time is painted over the start of that line, hiding as many of its columns as the time and the space after it take. Claude Code's code draws the same line above a reply in the normal view while its `showMessageTimestamps` setting is on. A fullscreen session without `--verbose` shows it.
+- **A run of tool calls drawn unfolded.** Under `--verbose`, and in the ctrl+o view of the non-fullscreen screen, Claude Code draws a run's calls as rows of their own inside the run. The run and its first call then each carry the same time, each at the left of its own top line, so the time shows twice, and each call in the run takes a line more than Claude Code draws, for the blank line the mod adds above it. A fullscreen session without `--verbose` does not show it.
+- **What Claude Code draws on the line above a row's `⏺`.** The time is painted over the start of that line, whatever Claude Code draws there. Above most rows that line is blank. The mod tells one other line apart, the "From main" label above a subagent's prompt from main, and gives that row's time a line of its own; any other line Claude Code draws there, such as its own time and model above a reply in the ctrl+o view, loses its start to the time.
+- **A row whose time has scrolled out of view.** In a fullscreen session, a row scrolled so that the line its time stands on is above the view shows no time, though the rest of the row is still in view.
 - **The row for agents launched in one message.** When Claude launches two or more agents in one message, Claude Code draws them as one row of their own, such as `⏺ 4 background agents launched`, or `Running 2 agents…` and then `2 agents finished` for agents that run in the foreground. That row shows no time because Claude Code hands it to no mod: it draws the row with the Agent tool's own renderer for a group and raises `ui.render` for neither the row nor the calls in it. The transcript does record the time, on the line of each call, so what a mod is missing is a `ui.render` component for the row. Under `--verbose` and in the ctrl+o view Claude Code draws each call as a tool-call row of its own, which shows its time.
 
 ## Requirements
