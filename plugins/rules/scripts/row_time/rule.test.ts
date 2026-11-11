@@ -329,3 +329,24 @@ test('a row recorded in lines already read for another row is drawn without read
   const ui = await drawReplyRow($)
   expect({ shown: (await ui.find({ type: 'Text' }))?.text, ran }).toEqual({ shown: `${timeOfDay('2026-11-10T09:32:41.970Z')} `, ran: [['tail', '-n', '+1', TRANSCRIPT]] })
 })
+
+test('a row the transcript lacked when first drawn is looked for, when drawn again, only in the lines the transcript has gained', async ($, on) => {
+  const clock = mock.clock(on)
+  const files = { [TRANSCRIPT]: BEFORE_THE_CALL }
+  const ran = host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  const ranForFirstDraw = ran.length
+  // Claude Code adds the call to the conversation, and a moment later writes it to the transcript, its third line.
+  const call = { type: 'tool_use', id: SKILL_CALL.tool_use_id, name: 'Skill', input: SKILL_CALL.input } as const
+  await $.session.append({
+    message: { type: 'assistant', role: 'assistant', content: [call] },
+    door: 'response',
+    origin: { kind: 'model', model: 'claude-opus-5-5' },
+    uuid: 'a2dc512c-f195-45f6-9351-8da543c2d09b',
+  })
+  files[TRANSCRIPT] += transcript(assistant('a2dc512c-f195-45f6-9351-8da543c2d09b', '2026-11-10T09:30:16.161Z', call))
+  await clock.advance(1000)
+  const shown = (await ui.find({ type: 'Text' }))?.text
+  expect({ shown, ran: ran.slice(ranForFirstDraw) }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [['tail', '-n', '+3', TRANSCRIPT]] })
+})
