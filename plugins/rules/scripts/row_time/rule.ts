@@ -32,18 +32,31 @@ function keptTimes(text: string): Map<string, string> {
 }
 
 /**
+ * The transcripts a session's rows are recorded in: the session's own, then those of its subagents, which Claude Code
+ * keeps in the session's folder beside it.
+ */
+async function transcriptsOf($: EngineInterface, transcript: string): Promise<string[]> {
+  const subagents = transcript.replace(/\.jsonl$/, '/subagents')
+  const theirs = await $.fs.list(subagents).catch(() => [])
+  return [transcript, ...theirs.map((entry) => `${subagents}/${entry.name}`)]
+}
+
+/** The timestamp a transcript file records for a row, or undefined where it holds no record of the row. */
+async function timestampIn($: EngineInterface, file: string, id: string): Promise<string | undefined> {
+  // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
+  const { stdout } = await $.process.run(['tail', '-n', '+1', file])
+  const record = stdout.split('\n').find((line) => recordsRow(line, id))
+  return record && JSON.parse(record).timestamp
+}
+
+/**
  * The timestamp the transcript records for a row: the one kept, or else the one read from the transcript, which is
  * then kept, in the times file too. Undefined until the transcript holds the row.
  */
 async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, id: string): Promise<string | undefined> {
   if (kept.has(id)) return kept.get(id)
-  const subagents = transcript.replace(/\.jsonl$/, '/subagents')
-  const theirs = (await $.fs.list(subagents).catch(() => [])).map((entry) => `${subagents}/${entry.name}`)
-  for (const file of [transcript, ...theirs]) {
-    // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
-    const { stdout } = await $.process.run(['tail', '-n', '+1', file])
-    const record = stdout.split('\n').find((line) => recordsRow(line, id))
-    const timestamp: string | undefined = record && JSON.parse(record).timestamp
+  for (const file of await transcriptsOf($, transcript)) {
+    const timestamp = await timestampIn($, file, id)
     if (timestamp) {
       kept.set(id, timestamp)
       await $.fs.write(timesFile(transcript), timesText(kept))
