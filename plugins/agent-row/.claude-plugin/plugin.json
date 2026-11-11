@@ -1,0 +1,6 @@
+{
+  "name": "agent-row",
+  "description": "Shows each background agent's model and spawn description in its row.",
+  "author": { "name": "trackness" },
+  "license": "MIT"
+}

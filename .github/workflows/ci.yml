@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    # A pull request from a branch of this repository is already tested by that branch's push.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    # macOS, which has zsh: some tests source the session's env file in zsh as well as bash, and the Linux runner has none.
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
+      # no:skipping runs the tests marked to skip without git 2.54.0 or zsh, so a runner that lacks either fails here.
+      - name: Test on the pinned Python
+        run: uv run pytest -p no:skipping
+      - name: Test on the oldest Python the rules run on
+        run: uvx --python 3.9 pytest -p no:skipping -p no:cacheprovider
+
+  mods:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    env:
+      # Makes a session without a terminal write Claude Code's types into each mod it loads, as an interactive one does.
+      CLAUDE_CODE_PLUGIN_DIR_WATCH: "1"
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+      # The Claude Code version the mods' READMEs say they are built and tested against: change both together.
+      - run: npm install -g @anthropic-ai/claude-code@2.1.322 typescript@5.9.3
+      - name: Lay Claude Code's types in each mod
+        run: claude -p --input-format stream-json --output-format stream-json --verbose --plugin-dir plugins/subagent-model --plugin-dir plugins/row-time < /dev/null
+      - run: tsc -p plugins/subagent-model
+      - run: tsc -p plugins/row-time
+      - run: claude plugin test plugins/subagent-model
+      - run: claude plugin test plugins/row-time
+      - name: Validate every plugin and the marketplace
+        run: |
+          for plugin in plugins/*/; do claude plugin validate "$plugin"; done
+          claude plugin validate .

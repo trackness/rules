@@ -1,10 +1,14 @@
 """Tests for "One command per Bash call". Run from the repo root: uv run pytest"""
 import io
 import json
+import subprocess
+from pathlib import Path
 
 import pytest
 
 from .rule import chains, main
+
+SCRIPT = Path(__file__).resolve().parent / "rule.py"
 
 
 def tool_call(cmd):
@@ -76,3 +80,9 @@ def test_main_block_gives_a_reason():
     stderr = io.StringIO()
     main(tool_call("cd /tmp && ls"), stderr)
     assert stderr.getvalue().strip() != ""
+
+
+def test_the_script_run_as_a_hook_blocks_a_chained_command():
+    """Claude Code runs the script by its path with the tool call on stdin, and takes exit code 2 as a block."""
+    result = subprocess.run([SCRIPT], input=tool_call("cd /tmp && ls").getvalue(), capture_output=True, text=True)
+    assert result.returncode == 2

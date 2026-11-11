@@ -1,0 +1,6 @@
+{
+  "name": "subagent-model",
+  "description": "A rule that makes Claude name a model for every subagent it starts.",
+  "author": { "name": "trackness" },
+  "license": "MIT"
+}
