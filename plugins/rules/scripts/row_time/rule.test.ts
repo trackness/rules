@@ -122,13 +122,14 @@ test('a run of tool calls folded into one line shows the time of its first call'
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:41:07.346Z')} `)
 })
 
+// The Skill session's transcript as it stands when the call's row is first drawn: Claude Code has yet to write the call.
+const BEFORE_THE_CALL = transcript(
+  user('e0a040a6-aec9-4274-97fb-1f81430a0f1a', '2026-11-10T09:28:40.249Z', 'Load the plugin-authoring skill'),
+  assistant('90d8109b-6574-4132-9ae5-a58647538c3a', '2026-11-10T09:29:59.956Z', { type: 'thinking', thinking: '', signature: 'EqQBCkYI' }),
+)
+
 test('a row shows --:-- until the transcript has its time', async ($, on) => {
-  // The row is drawn as the call is made, before Claude Code has written the call to the transcript.
-  const written = transcript(
-    user('e0a040a6-aec9-4274-97fb-1f81430a0f1a', '2026-11-10T09:28:40.249Z', 'Load the plugin-authoring skill'),
-    assistant('90d8109b-6574-4132-9ae5-a58647538c3a', '2026-11-10T09:29:59.956Z', { type: 'thinking', thinking: '', signature: 'EqQBCkYI' }),
-  )
-  host(on, { [TRANSCRIPT]: written })
+  host(on, { [TRANSCRIPT]: BEFORE_THE_CALL })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
   expect((await ui.find({ type: 'Text' }))?.text).toBe('--:-- ')
@@ -136,12 +137,7 @@ test('a row shows --:-- until the transcript has its time', async ($, on) => {
 
 test('once the transcript has the time, the row is redrawn in place with it', async ($, on) => {
   const clock = mock.clock(on)
-  const files = {
-    [TRANSCRIPT]: transcript(
-      user('e0a040a6-aec9-4274-97fb-1f81430a0f1a', '2026-11-10T09:28:40.249Z', 'Load the plugin-authoring skill'),
-      assistant('90d8109b-6574-4132-9ae5-a58647538c3a', '2026-11-10T09:29:59.956Z', { type: 'thinking', thinking: '', signature: 'EqQBCkYI' }),
-    ),
-  }
+  const files = { [TRANSCRIPT]: BEFORE_THE_CALL }
   host(on, files)
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })

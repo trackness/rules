@@ -3,6 +3,9 @@ import type { Register, RenderElement } from 'claude-code'
 /** What a row shows in place of its time, until the transcript holds one. */
 const NOT_YET = '--:--'
 
+/** How long the rows wait to be drawn again after the conversation gains a row, in milliseconds. */
+const WRITE_WAIT_MS = 100
+
 /** The time of day of a transcript timestamp, as HH:MM where the session runs. */
 function timeOfDay(timestamp: string): string {
   return new Date(timestamp).toTimeString().slice(0, 5)
@@ -21,7 +24,8 @@ export const register: Register = (on) => {
   })
   on('session.append', async ($, e, next) => {
     const stored = await next(e)
-    $.clock.after(100, () => $.ui.invalidate('ui.render'))
+    // Claude Code writes a row to the transcript a moment after the row joins the conversation, so the redraw waits.
+    $.clock.after(WRITE_WAIT_MS, () => $.ui.invalidate('ui.render'))
     return stored
   })
   on('ui.render', async ($, e, next) => {
