@@ -159,6 +159,7 @@ export const register: Register = (on) => {
     if (transcript === '' || OUTSIDE_THE_TRANSCRIPT.includes(e.component)) return next(e)
     // A subagent ends with a SubagentHandback call, for which Claude Code draws no row.
     if (e.component === 'ToolUse' && e.props.tool === 'SubagentHandback') return next(e)
+    if (e.component === 'AssistantMessage' && e.props.text === 'No response requested.') return next(e)
     // A slash command's output stands under the command's own line, which Claude Code hands no plugin to draw.
     if (e.component === 'CommandOutput') return next(e)
     const { Box, Text } = $.ui.resolve(e)
