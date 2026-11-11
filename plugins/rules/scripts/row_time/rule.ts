@@ -1,5 +1,8 @@
 import type { Register, RenderElement } from 'claude-code'
 
+/** What a row shows in place of its time, until the transcript holds one. */
+const NOT_YET = '--:--'
+
 /** The time of day of a transcript timestamp, as HH:MM where the session runs. */
 function timeOfDay(timestamp: string): string {
   return new Date(timestamp).toTimeString().slice(0, 5)
@@ -22,7 +25,7 @@ export const register: Register = (on) => {
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
     const record = stdout.split('\n').find((line) => recordsRow(line, id))
     const { Box, Text } = $.ui.resolve(e)
-    const shown = record === undefined ? '--:--' : timeOfDay(JSON.parse(record).timestamp)
+    const shown = record === undefined ? NOT_YET : timeOfDay(JSON.parse(record).timestamp)
     const time = h(Text, { dimColor: true }, `${shown} `)
     // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside the ⏺.
     return h(Box, { flexDirection: 'row' }, h(Box, { marginTop: 1 }, time), await next(e)) as RenderElement
