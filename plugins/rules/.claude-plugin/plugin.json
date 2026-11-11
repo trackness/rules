@@ -1,5 +1,6 @@
 {
   "name": "rules",
   "description": "Hooks that enforce rules on how Claude uses its tools.",
-  "author": { "name": "trackness" }
+  "author": { "name": "trackness" },
+  "license": "MIT"
 }
