@@ -141,6 +141,7 @@ export const register: Register = (on) => {
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
     kept.times = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
+    $.ui.invalidate('ui.render')
     return next(e)
   })
   on('session.append', async ($, e, next) => {
