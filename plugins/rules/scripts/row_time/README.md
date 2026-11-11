@@ -43,6 +43,7 @@ The mod hooks `classic.SessionStart` for the transcript's path, `session.append`
 In one run of Claude Code, each line of a transcript is read once, however long the transcript grows:
 
 - Claude Code hands a mod only the first 4 MiB of what a command writes, so a longer transcript is read in stretches of whole lines, one after another.
+- A single line longer than 4 MiB cannot be read whole, so it is passed over: the row it records shows `--:--`, and the rows after it are read as usual.
 - Each read starts at the byte where the last one ended, which `tail` goes straight to; told a line to start at, it would count through every line before it.
 - A read notes the time of every row in its lines, not only of the row it was made for, so a row recorded in lines already read is drawn without another read.
 - Rows drawn while a read is under way wait for it. A row that another row's read leaves without a time then reads on itself: that read may have ended at an earlier transcript, or been aborted when Claude Code dropped the other row's drawing.
@@ -53,4 +54,3 @@ Built and run against Claude Code 2.1.322. What the mod does not yet do right:
 
 - **A reply in the ctrl+o view.** Claude Code draws its own time and model on a line above each reply there, in place of the blank line it draws in the normal view, and tells a mod nothing of it, so the reply's time lands one line below its `⏺`. Claude Code's code draws the same line above a reply in the normal view while its `showMessageTimestamps` setting is on. This is the one fault a fullscreen session without `--verbose` shows.
 - **A run of tool calls drawn unfolded.** Under `--verbose`, and in the ctrl+o view of the non-fullscreen screen, Claude Code draws a run's calls as rows of their own inside the run. The run and its first call then each carry a time, two on one line. A fullscreen session without `--verbose` does not show it.
-- **A transcript line over 4 MiB.** A stretch that Claude Code cuts inside such a line holds no whole line, so the mod reads no further in that transcript, and the rows recorded after the line show `--:--`. No line that long has been met.
