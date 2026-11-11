@@ -1,5 +1,5 @@
 import type { On } from 'claude-code'
-import { expect, test, type Engine } from 'claude-code/testing'
+import { expect, mock, test, type Engine } from 'claude-code/testing'
 
 const TRANSCRIPT = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a.jsonl'
 
@@ -132,4 +132,28 @@ test('a row shows --:-- until the transcript has its time', async ($, on) => {
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
   expect((await ui.find({ type: 'Text' }))?.text).toBe('--:-- ')
+})
+
+test('once the transcript has the time, the row is redrawn in place with it', async ($, on) => {
+  const clock = mock.clock(on)
+  const files = {
+    [TRANSCRIPT]: transcript(
+      user('e0a040a6-aec9-4274-97fb-1f81430a0f1a', '2026-11-10T09:28:40.249Z', 'Load the plugin-authoring skill'),
+      assistant('90d8109b-6574-4132-9ae5-a58647538c3a', '2026-11-10T09:29:59.956Z', { type: 'thinking', thinking: '', signature: 'EqQBCkYI' }),
+    ),
+  }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: SKILL_CALL.tool_use_id, props: SKILL_CALL })
+  // Claude Code adds the call to the conversation, and writes it to the transcript a moment later.
+  const call = { type: 'tool_use', id: SKILL_CALL.tool_use_id, name: 'Skill', input: SKILL_CALL.input } as const
+  await $.session.append({
+    message: { type: 'assistant', role: 'assistant', content: [call] },
+    door: 'response',
+    origin: { kind: 'model', model: 'claude-opus-5-5' },
+    uuid: 'a2dc512c-f195-45f6-9351-8da543c2d09b',
+  })
+  files[TRANSCRIPT] += transcript(assistant('a2dc512c-f195-45f6-9351-8da543c2d09b', '2026-11-10T09:30:16.161Z', call))
+  await clock.advance(1000)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
