@@ -25,7 +25,7 @@ function noteTimes(line: string, recorded: Map<string, string>): void {
   const { timestamp } = JSON.parse(line)
   // Some lines carry no time, such as the copy Claude Code keeps of a request, which repeats the ids of its tool calls.
   if (!timestamp) return
-  for (const [, id] of line.matchAll(ROW_ID)) if (!recorded.has(id)) recorded.set(id, timestamp)
+  for (const [, id = ''] of line.matchAll(ROW_ID)) if (!recorded.has(id)) recorded.set(id, timestamp)
 }
 
 /** The file that keeps the times read from a transcript: beside the transcript, under its name. */

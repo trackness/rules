@@ -25,6 +25,9 @@ function timeOfDay(timestamp: string): string {
   return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
 }
 
+// The timer of the tests' own runtime, which the types Claude Code lays down for a plugin do not declare.
+declare function setTimeout(callback: () => void, milliseconds: number): unknown
+
 // How much of what a command writes Claude Code 2.1.322 hands a plugin: the first 4 MiB, the rest dropped.
 const STDOUT_LIMIT = 4 * 1024 * 1024
 
@@ -45,7 +48,7 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0) {
     writesUnderWay.push(() => {
       files[e.path] = e.text
     })
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => setTimeout(() => resolve(undefined), 0))
     writesUnderWay.pop()?.()
     return { value: undefined }
   })
@@ -320,11 +323,15 @@ test('a slash command\'s output, which Claude Code draws under the command\'s ow
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })
 
-// Twelve reads of one 410 KB log, as their rows carry the calls.
-const LOG_READS = Array.from({ length: 12 }, (_, n) => read(`toolu_01${String(n).padStart(22, '0')}`, '/srv/work/server.log'))
+// One of a run of reads of one 410 KB log, as its row carries the call.
+function logRead(n: number) {
+  return read(`toolu_01${String(n).padStart(22, '0')}`, '/srv/work/server.log')
+}
+
+const LOG_READS = Array.from({ length: 12 }, (_, n) => logRead(n))
 const LOG = '2026-11-10T09:00:00.000Z GET /health 200\n'.repeat(10_000)
 
-// A session in which Claude made those reads, 5 MB of transcript, before it called the Skill tool.
+// A session in which Claude made twelve of those reads, 5 MB of transcript, before it called the Skill tool.
 const LONG_SESSION =
   LOG_READS.map((call, n) =>
     transcript(
@@ -384,7 +391,7 @@ test('a row drawn at once with a row recorded 4 MiB before it shows its time', a
   host(on, { [TRANSCRIPT]: LONG_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   // The first read's row, recorded at the top of the transcript.
-  const firstRead = $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: LOG_READS[0].tool_use_id, props: { ...LOG_READS[0], isExpanded: false } })
+  const firstRead = $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: logRead(0).tool_use_id, props: { ...logRead(0), isExpanded: false } })
   const [, ui] = await Promise.all([firstRead, drawSkillRow($)])
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
