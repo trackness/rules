@@ -31,7 +31,7 @@ const STDOUT_LIMIT = 4 * 1024 * 1024
 // The host beneath the plugin: a session that starts, and its files. A plugin's own file read refuses a file over
 // 4 MiB, which a transcript passes, so the files are read from a line on by tail. A write replaces a file whole.
 // Answers with the commands the plugin ran.
-function host(on: On, files: Record<string, string>) {
+function host(on: On, files: Record<string, string>, commandsAborted = 0) {
   const ran: (readonly string[])[] = []
   on('classic.SessionStart', () => ({}))
   on('fs.read', ($, e) => {
@@ -50,6 +50,8 @@ function host(on: On, files: Record<string, string>) {
   })
   on('process.run', ($, e) => {
     ran.push(e.argv)
+    // Claude Code aborts the command under way for a drawing it drops: here, the first commands the plugin runs.
+    if (ran.length <= commandsAborted) throw new Error(`rules: $.process.run(${String(e.argv[0])}) aborted`)
     const [command, flag, from, path] = e.argv
     const text = path === undefined ? undefined : files[path]
     if (command !== 'tail' || flag !== '-n' || text === undefined) {
@@ -377,4 +379,12 @@ test('a row drawn at once with a row recorded 4 MiB before it shows its time', a
   const firstRead = $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: LOG_READS[0].tool_use_id, props: { ...LOG_READS[0], isExpanded: false } })
   const [, ui] = await Promise.all([firstRead, drawSkillRow($)])
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
+test('a row that waited on another row\'s read, which Claude Code cut short, reads the transcript itself', async ($, on) => {
+  // Claude Code drops the Skill row's drawing, and aborts the read under way for it: the first of the session.
+  host(on, { [TRANSCRIPT]: REPLY_SESSION }, 1)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const [, ui] = await Promise.all([drawSkillRow($), drawReplyRow($)])
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:32:41.970Z')} `)
 })
