@@ -276,3 +276,11 @@ test('a subagent\'s handback call, which Claude Code draws nothing for, shows no
   const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: handback.tool_use_id, props: handback })
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })
+
+test('a tool call\'s result stays under its call, moved right by the width of a time, and shows no time of its own', async ($, on) => {
+  host(on, { [TRANSCRIPT]: SKILL_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const result = { tool_use_id: SKILL_CALL.tool_use_id, tool: 'Skill', output: SKILL_CALL.output, isErrored: false, isExpanded: false }
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolResult', requestId: SKILL_CALL.tool_use_id, props: result })
+  expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'row' }, children: [{ type: 'Text', children: ['      '] }, { type: 'engine' }] })
+})
