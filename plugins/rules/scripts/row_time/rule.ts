@@ -3,6 +3,9 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 /** What a row shows in place of its time, until the transcript holds one. */
 const NOT_YET = '--:--'
 
+/** As wide as a time and the space after it: what stands left of a part of a row that carries no time. */
+const NO_TIME = '      '
+
 /** What Claude Code draws outside the transcript: the spinner, the band above the prompt and the lines under it. */
 const OUTSIDE_THE_TRANSCRIPT = ['Spinner', 'AbovePrompt', 'PromptHint', 'SessionMode']
 
@@ -91,7 +94,8 @@ export const register: Register = (on) => {
     // A subagent ends with a SubagentHandback call, for which Claude Code draws no row.
     if (e.component === 'ToolUse' && e.props.tool === 'SubagentHandback') return next(e)
     const { Box, Text } = $.ui.resolve(e)
-    if (e.component === 'ToolResult') return h(Box, { flexDirection: 'row' }, h(Text, null, '      '), await next(e)) as RenderElement
+    // A result is part of its call's row: it moves right with the call, and the call carries the time.
+    if (e.component === 'ToolResult') return h(Box, { flexDirection: 'row' }, h(Text, null, NO_TIME), await next(e)) as RenderElement
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
     const timestamp = await recordedTimestamp($, transcript, kept, id)
