@@ -29,7 +29,7 @@ function timeOfDay(timestamp: string): string {
 const STDOUT_LIMIT = 4 * 1024 * 1024
 
 // The host beneath the plugin: a session that starts, and its files. A plugin's own file read refuses a file over
-// 4 MiB, which a transcript passes, so the files are read from a line on by tail. A write replaces a file whole.
+// 4 MiB, which a transcript passes, so the files are read from a byte on by tail. A write replaces a file whole.
 // Answers with the commands the plugin ran.
 function host(on: On, files: Record<string, string>, commandsAborted = 0) {
   const ran: (readonly string[])[] = []
@@ -60,11 +60,11 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0) {
     if (ran.length <= commandsAborted) throw new Error(`rules: $.process.run(${String(e.argv[0])}) aborted`)
     const [command, flag, from, path] = e.argv
     const text = path === undefined ? undefined : files[path]
-    if (command !== 'tail' || (flag !== '-n' && flag !== '-c') || text === undefined) {
+    if (command !== 'tail' || flag !== '-c' || text === undefined) {
       return { value: { exitCode: 1, stdout: '', stderr: `${String(command)}: ${String(path)}: No such file or directory\n`, isStdoutTruncated: false, isStderrTruncated: false } }
     }
-    // From a line on, or from a byte on: the transcripts here are ASCII, a byte to a character.
-    const stdout = flag === '-n' ? text.split('\n').slice(Number(from) - 1).join('\n') : text.slice(Number(from) - 1)
+    // The transcripts here are ASCII, a byte to a character.
+    const stdout = text.slice(Number(from) - 1)
     return { value: { exitCode: 0, stdout: stdout.slice(0, STDOUT_LIMIT), stderr: '', isStdoutTruncated: stdout.length > STDOUT_LIMIT, isStderrTruncated: false } }
   })
   return ran

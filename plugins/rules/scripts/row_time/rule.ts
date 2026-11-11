@@ -55,8 +55,8 @@ async function transcriptsOf($: EngineInterface, transcript: string): Promise<st
 
 /** What has been read of a session's transcripts so far. */
 type Reading = {
-  /** How many lines of each transcript file have been read, by the file: its next read starts at the line after them. */
-  linesRead: Map<string, number>
+  /** How many bytes of each transcript file have been read, by the file: its next read starts at the byte after them. */
+  bytesRead: Map<string, number>
   /** The time of every row in the lines read, by the id of the row: the rows drawn, and those not yet drawn. */
   recorded: Map<string, string>
   /** The read now under way, which a row drawn during it waits for and does not start again. */
@@ -64,25 +64,25 @@ type Reading = {
 }
 
 /**
- * Reads on in a transcript file, from the line after the last one read to its end: the time of every row in those
- * lines is noted, and the lines are counted as read.
+ * Reads on in a transcript file, from the byte after the last one read to its end: the time of every row in the
+ * lines there is noted, and their bytes are counted as read.
  */
-async function readOn($: EngineInterface, file: string, { linesRead, recorded }: Reading): Promise<void> {
+async function readOn($: EngineInterface, file: string, { bytesRead, recorded }: Reading): Promise<void> {
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes. Claude Code hands
-  // back only the first 4 MiB of what tail writes, so the file is read a stretch at a time, each from the line after
-  // the last. Claude Code aborts the read under way for a drawing it drops, which is a read of nothing: the lines are
+  // back only the first 4 MiB of what tail writes, so the file is read a stretch at a time, each from the byte after
+  // the last. tail goes straight to a byte it is told to start at, where it would count through every line before a
+  // line. Claude Code aborts the read under way for a drawing it drops, which is a read of nothing: the lines are
   // read when a row is next looked for.
   for (;;) {
-    const read = linesRead.get(file) ?? 0
+    const read = bytesRead.get(file) ?? 0
     const { stdout, isStdoutTruncated } = await $.process.run(['tail', '-c', `+${read + 1}`, file]).catch(() => ({ stdout: '', isStdoutTruncated: false }))
     // What follows the last line break is a line cut short, or nothing.
-    const whole = stdout.slice(0, stdout.lastIndexOf('\n') + 1)
-    const lines = whole.split('\n').slice(0, -1)
-    for (const line of lines) noteTimes(line, recorded)
-    linesRead.set(file, read + new TextEncoder().encode(whole).length)
+    const wholeLines = stdout.slice(0, stdout.lastIndexOf('\n') + 1)
+    for (const line of wholeLines.split('\n').slice(0, -1)) noteTimes(line, recorded)
+    bytesRead.set(file, read + new TextEncoder().encode(wholeLines).length)
     // There is no more to read: the stretch was handed back whole, or held no whole line, being cut inside a first
     // line longer than Claude Code hands back.
-    if (!isStdoutTruncated || lines.length === 0) return
+    if (!isStdoutTruncated || wholeLines === '') return
   }
 }
 
@@ -137,7 +137,7 @@ export const register: Register = (on) => {
   // The session's transcript file: empty until the session starts, and for a session that keeps none.
   let transcript = ''
   const kept: Kept = { times: new Map(), written: Promise.resolve() }
-  const reading: Reading = { linesRead: new Map(), recorded: new Map() }
+  const reading: Reading = { bytesRead: new Map(), recorded: new Map() }
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
     kept.times = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
