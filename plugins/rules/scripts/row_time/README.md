@@ -41,4 +41,3 @@ The mod hooks `classic.SessionStart` for the transcript's path, `session.append`
 Built and run against Claude Code 2.1.322.
 
 - In the ctrl+o view, Claude Code draws its own time and model on a line above each reply, in place of the blank line it draws there in the normal view, and tells a mod nothing of it. The reply's time then lands one line below its `⏺`.
-- In the ctrl+o view, Claude Code adds lines of its own under a result, such as `⎿ 1 PostToolUse hook ran`, which no mod can draw. They stay at the left edge, out of line with the result above them. Moving them with the result is a future improvement.
