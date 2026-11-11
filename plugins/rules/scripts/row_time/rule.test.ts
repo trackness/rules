@@ -27,13 +27,21 @@ function timeOfDay(timestamp: string): string {
 
 // The host beneath the plugin: a session that starts, and its files. A plugin's own file read refuses a file over
 // 4 MiB, which a transcript passes, so the files are read from a line on by tail. A write replaces a file whole.
+// Answers with the commands the plugin ran.
 function host(on: On, files: Record<string, string>) {
+  const ran: (readonly string[])[] = []
   on('classic.SessionStart', () => ({}))
+  on('fs.read', ($, e) => {
+    const text = files[e.path]
+    if (text === undefined) throw new Error(`ENOENT: no such file or directory, open '${e.path}'`)
+    return { value: text }
+  })
   on('fs.write', ($, e) => {
     files[e.path] = e.text
     return { value: undefined }
   })
   on('process.run', ($, e) => {
+    ran.push(e.argv)
     const [command, flag, from, path] = e.argv
     const text = path === undefined ? undefined : files[path]
     if (command !== 'tail' || flag !== '-n' || text === undefined) {
@@ -42,6 +50,7 @@ function host(on: On, files: Record<string, string>) {
     const stdout = text.split('\n').slice(Number(from) - 1).join('\n')
     return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
+  return ran
 }
 
 const SKILL_CALL = {
@@ -194,4 +203,12 @@ test('the file keeps the time of every row read so far', async ($, on) => {
   await drawSkillRow($)
   await drawReplyRow($)
   expect(files[TIMES]).toBe(`${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:32:41.970Z\n`)
+})
+
+test('a row whose time is already in the file is drawn from it, without reading the transcript', async ($, on) => {
+  // The session is resumed: the file holds what was read before.
+  const ran = host(on, { [TRANSCRIPT]: SKILL_SESSION, [TIMES]: `${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n` })
+  await $.classic.SessionStart({ source: 'resume', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  expect({ shown: (await ui.find({ type: 'Text' }))?.text, ran }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [] })
 })
