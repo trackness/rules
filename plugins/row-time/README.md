@@ -32,7 +32,7 @@ Above a subagent's prompt from main, Claude Code draws its "From main" label in 
 
 The time is the timestamp Claude Code records for the row in the session's transcript, shown as the time of day where the session runs. The mod never reads the clock.
 
-Claude Code draws a row a moment before it writes the row to the transcript. Until the transcript has the row's time, the row shows `--:--`. The mod draws the rows again 100 ms after each row joins the conversation, which fills the time in where the row stands; a row the transcript still lacks then is filled in at a later redraw.
+Claude Code draws a row a moment before it writes the row to the transcript. Until the transcript has the row's time, the row shows `--:--`. The mod draws the rows again 300 ms after each row joins the conversation, which fills the time in where the row stands, since Claude Code writes what it has queued for the transcript every 100 ms; a row the transcript still lacks then is filled in at a later redraw.
 
 Claude Code draws a resumed session's rows before it tells a mod where the transcript is. The mod draws them again as soon as it knows, so they carry their times from the start.
 

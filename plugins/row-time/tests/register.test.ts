@@ -192,9 +192,9 @@ test('a row shows --:-- until the transcript has its time', async ($, on) => {
   expect((await ui.find({ type: 'Text' }))?.text).toBe('--:-- ')
 })
 
-// Claude Code adds the Skill call to the conversation, and a moment later writes it to the transcript, as its next
-// line. The rows are drawn again by then.
-async function recordSkillCall($: Engine, clock: ReturnType<typeof mock.clock>, files: Record<string, string>) {
+// Claude Code adds the Skill call to the conversation, and writes it to the transcript, as its next line, `writtenAfterMs`
+// later. The rows are drawn again by a second after the call joins.
+async function recordSkillCall($: Engine, clock: ReturnType<typeof mock.clock>, files: Record<string, string>, writtenAfterMs = 0) {
   const call = { type: 'tool_use', id: SKILL_CALL.tool_use_id, name: 'Skill', input: SKILL_CALL.input } as const
   await $.session.append({
     message: { type: 'assistant', role: 'assistant', content: [call] },
@@ -202,6 +202,7 @@ async function recordSkillCall($: Engine, clock: ReturnType<typeof mock.clock>, 
     origin: { kind: 'model', model: 'claude-opus-5-5' },
     uuid: 'a2dc512c-f195-45f6-9351-8da543c2d09b',
   })
+  await clock.advance(writtenAfterMs)
   files[TRANSCRIPT] += transcript(assistant('a2dc512c-f195-45f6-9351-8da543c2d09b', '2026-11-10T09:30:16.161Z', call))
   await clock.advance(1000)
 }
@@ -213,6 +214,17 @@ test('once the transcript has the time, the row is redrawn in place with it', as
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const ui = await drawSkillRow($)
   await recordSkillCall($, clock, files)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
+test('a row Claude Code writes to the transcript only at its next flush, over 100 ms after the row joins, is redrawn with its time', async ($, on) => {
+  const clock = mock.clock(on)
+  const files = { [TRANSCRIPT]: BEFORE_THE_CALL }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  // Claude Code 2.1.322 writes what it has queued for the transcript on a 100 ms timer, and the write takes a moment.
+  await recordSkillCall($, clock, files, 150)
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
 

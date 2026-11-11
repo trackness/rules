@@ -13,8 +13,11 @@ const TIMED = ['UserMessage', 'AssistantMessage', 'ToolUse', 'ToolGroup', 'TurnD
 /** The text of the reply Claude Code 2.1.322 adds to a session it forks, in the model's place. */
 const ADDED_REPLY = 'No response requested.'
 
-/** How long the rows wait to be drawn again after the conversation gains a row, in milliseconds. */
-const WRITE_WAIT_MS = 100
+/**
+ * How long the rows wait to be drawn again after the conversation gains a row, in milliseconds. Claude Code 2.1.322
+ * writes what it has queued for the transcript on a 100 ms timer (`FLUSH_INTERVAL_MS`), so a wait of 100 ms races it.
+ */
+const WRITE_WAIT_MS = 300
 
 /** The time of day of a transcript timestamp, as HH:MM where the session runs. */
 function timeOfDay(timestamp: string): string {
