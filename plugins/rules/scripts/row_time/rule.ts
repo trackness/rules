@@ -17,6 +17,6 @@ export const register: Register = (on) => {
     const record = stdout.split('\n').find((line) => line.includes(`"id":"${e.requestId}"`))
     const { Box, Text } = $.ui.resolve(e)
     const time = h(Text, { dimColor: true }, `${timeOfDay(JSON.parse(record as string).timestamp)} `)
-    return h(Box, { flexDirection: 'row' }, time, await next(e)) as RenderElement
+    return h(Box, { flexDirection: 'row' }, h(Box, { marginTop: 1 }, time), await next(e)) as RenderElement
   })
 }
