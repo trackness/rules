@@ -44,7 +44,7 @@ async function transcriptsOf($: EngineInterface, transcript: string): Promise<st
 /** The timestamp a transcript file records for a row, or undefined where it holds no record of the row. */
 async function timestampIn($: EngineInterface, file: string, id: string): Promise<string | undefined> {
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
-  const { stdout } = await $.process.run(['tail', '-n', '+1', file])
+  const { stdout } = await $.process.run(['tail', '-n', '+1', file]).catch(() => ({ stdout: '' }))
   const record = stdout.split('\n').find((line) => recordsRow(line, id))
   return record && JSON.parse(record).timestamp
 }
