@@ -11,13 +11,13 @@ jobs:
   python:
     # A pull request from a branch of this repository is already tested by that branch's push.
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
-    runs-on: ubuntu-latest
+    # macOS, which has zsh: some tests source the session's env file in zsh as well as bash, and the Linux runner has none.
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
-      - run: sudo apt-get install -y zsh
       # no:skipping runs the tests marked to skip without git 2.54.0 or zsh, so a runner that lacks either fails here.
       - name: Test on the pinned Python
         run: uv run pytest -p no:skipping
