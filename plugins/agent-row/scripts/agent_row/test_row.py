@@ -21,7 +21,10 @@ def agent(**fields):
         "label": "Review the auth module",
         "startTime": NOW - 5_700,
         "model": "claude-opus-5-5",
+        "contextWindowSize": 1_000_000,
         "tokenCount": 0,
+        "tokenSamples": [0],
+        "cwd": "/home/dev/project",
         **fields,
     }
 
@@ -29,7 +32,16 @@ def agent(**fields):
 def drawn(tasks, columns=120):
     """The body the command prints for each task's row, by the task's id."""
     stdout = io.StringIO()
-    main(io.StringIO(json.dumps({"columns": columns, "tasks": tasks})), stdout, NOW)
+    panel = {
+        "session_id": "00000000-0000-4000-8000-000000000001",
+        "transcript_path": "/home/dev/.claude/projects/project/00000000-0000-4000-8000-000000000001.jsonl",
+        "cwd": "/home/dev/project",
+        "scratchpad_dir": "/tmp/claude/project/00000000-0000-4000-8000-000000000001/scratchpad",
+        "prompt_id": "00000000-0000-4000-8000-000000000002",
+        "columns": columns,
+        "tasks": tasks,
+    }
+    main(io.StringIO(json.dumps(panel)), stdout, NOW)
     return {line["id"]: line["content"] for line in map(json.loads, stdout.getvalue().splitlines())}
 
 
@@ -52,16 +64,16 @@ def test_running_agent_gets_a_row():
     assert list(drawn([agent()])) == ["a1"]
 
 
+def test_stopped_agent_gets_a_row():
+    assert list(drawn([agent(status="completed")])) == ["a1"]
+
+
 def test_row_starts_with_the_agents_type():
     assert cells(body())[0] == "general-purpose"
 
 
 def test_named_agent_shows_its_name_in_place_of_its_type():
     assert cells(body(name="auth-reviewer"))[0] == "auth-reviewer"
-
-
-def test_stopped_agent_keeps_claude_codes_row():
-    assert drawn([agent(status="completed")]) == {}
 
 
 def test_model_follows_the_type_in_short():
@@ -85,8 +97,12 @@ def test_progress_summary_follows_the_description():
     assert cells(body(label="Reading src/auth/session.py"))[2:4] == ["Review the auth module", "Reading src/auth/session.py"]
 
 
-def test_description_is_not_shown_twice_before_a_progress_summary():
-    assert body(description="Review the auth module", label="Review the auth module").count("Review the auth module") == 1
+def test_running_agent_without_a_progress_summary_says_it_has_none_yet():
+    assert cells(body(description="Review the auth module", label="Review the auth module"))[2:4] == ["Review the auth module", "no summary yet"]
+
+
+def test_stopped_agent_without_a_progress_summary_says_it_has_none():
+    assert cells(body(status="completed", description="Review the auth module", label="Review the auth module"))[2:4] == ["Review the auth module", "no summary"]
 
 
 def test_long_description_is_cut_to_its_limit():
@@ -104,16 +120,30 @@ def test_fixed_columns_line_up_across_rows():
     assert first == second
 
 
-def test_model_not_yet_known_leaves_its_cell_blank():
-    just_spawned = agent(id="a2", description="Find config loading")
-    del just_spawned["model"]
-    rows = drawn([agent(id="a1", description="Review the auth module"), just_spawned])
+def test_stopped_agents_row_lines_up_with_the_running_agents_rows():
+    rows = drawn([
+        agent(id="a1", agentType="Explore", model="claude-haiku-5-5", description="Count files by extension", label="Waiting 65 seconds via Python fallback"),
+        agent(id="a2", agentType="general-purpose", status="completed", model="claude-sonnet-5-5", description="Summarise recent commits", label="Waiting 70 seconds via Python"),
+    ])
+    running = [column_of(rows["a1"], text) for text in ("haiku-5.5", "Count files by extension", "Waiting 65 seconds via Python fallback")]
+    stopped = [column_of(rows["a2"], text) for text in ("sonnet-5.5", "Summarise recent commits", "Waiting 70 seconds via Python")]
+    assert running == stopped
+
+
+def test_task_restored_without_a_model_leaves_its_cell_blank():
+    restored = agent(id="a2", description="Find config loading")
+    del restored["model"]
+    rows = drawn([agent(id="a1", description="Review the auth module"), restored])
     assert cells(rows["a2"])[:2] == ["general-purpose", "Find config loading"]
     assert column_of(rows["a2"], "Find config loading") == column_of(rows["a1"], "Review the auth module")
 
 
 def test_row_ends_with_the_running_time_then_the_token_count():
     assert body(startTime=NOW - 5_700, tokenCount=12_345).endswith("5s · ↓ 12.3k tokens")
+
+
+def test_stopped_agent_shows_its_status_in_place_of_a_running_time():
+    assert cells(body(status="completed", startTime=NOW - 26_900, tokenCount=30_977))[-1] == "completed · ↓ 31.0k tokens"
 
 
 def test_running_time_and_token_count_stand_at_the_right_edge():
@@ -149,11 +179,15 @@ def test_narrow_panel_cuts_the_activity_and_keeps_the_time_and_tokens():
 
 
 def test_cut_of_only_trailing_spaces_shows_no_ellipsis():
-    assert "…" not in body(columns=71, description="Review the auth module", label="Review the auth module", tokenCount=12_345)
+    assert "…" not in body(columns=99, description="Review the auth module", label="Reading src/auth/session.py ", tokenCount=12_345)
 
 
-def test_panel_too_narrow_for_the_time_and_tokens_keeps_claude_codes_row():
-    assert drawn([agent(startTime=NOW - 5_700, tokenCount=12_345)], columns=20) == {}
+def test_panel_too_narrow_for_one_rows_time_and_tokens_leaves_every_row_to_claude_code():
+    rows = drawn([
+        agent(id="a1", agentType="Explore", startTime=NOW - 62_000, tokenCount=26_333),
+        agent(id="a2", agentType="Plan", status="completed", tokenCount=30_977),
+    ], columns=27)
+    assert rows == {}
 
 
 def test_each_wide_character_takes_two_of_the_panels_columns():

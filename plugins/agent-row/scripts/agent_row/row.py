@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""subagentStatusLine command: draw each running background agent's row with its model and spawn description."""
+"""subagentStatusLine command: draw each background agent's row with its model and spawn description."""
 import json
 import re
 import sys
@@ -8,7 +8,7 @@ import unicodedata
 
 GAP = "  "  # between columns, because a description or an activity has single spaces of its own
 # The Agent tool asks for a description of 3 to 5 words, which 32 columns holds whole; a longer one is cut here so that
-# it never crowds out the activity, the part of the row that changes: a 120-column panel still leaves the activity some 35.
+# it never crowds out the activity, the part of the row that changes: a 120-column panel still leaves the activity some 30.
 DESCRIPTION_LIMIT = 32
 
 
@@ -69,53 +69,59 @@ def clip(text, width):
 
 
 def fixed_cells(task):
-    """The running agent's cells in the columns that line up across the rows: its type or name, its model and its description."""
+    """The agent's cells in the columns that line up across the rows: its type or name, its model and its description."""
     return [
         task.get("name") or task["agentType"],
-        short_model(task.get("model", "")),  # Claude Code sends no model until it has resolved it
+        short_model(task.get("model", "")),  # absent only from a task that Claude Code restored from disk
         clip(task["description"], DESCRIPTION_LIMIT),
     ]
 
 
 def time_and_tokens(task, now):
-    """The running agent's time and tokens as Claude Code writes them at the right of its row, such as 1m 5s · ↓ 12.3k tokens."""
-    written = running_time(now - task["startTime"])
+    """The right of the agent's row: its running time, or its status once it has stopped, then its tokens, such as 1m 5s · ↓ 12.3k tokens."""
+    # Claude Code sends no end time, so the time since a stopped agent's start would go on counting past its end.
+    written = running_time(now - task["startTime"]) if task["status"] == "running" else task["status"]
     if task["tokenCount"]:
+        # Always ↓: Claude Code's own row shows ↑ until the agent has had some activity, which it does not send.
         written += f" · ↓ {token_count(task['tokenCount'])} tokens"
     return written
 
 
-def body(task, widths, columns, now):
-    """The body of the running agent's row, columns wide: its fixed cells padded to their columns' widths, its activity, then its time and tokens.
+def activity(task):
+    """The agent's latest progress summary, or, until it has one, a note that it has none, so that the column never looks lost."""
+    # Until the agent has a progress summary, Claude Code sends its description as its label.
+    if task["label"] != task["description"]:
+        return task["label"]
+    return "no summary yet" if task["status"] == "running" else "no summary"
 
-    What does not fit is cut from the left part, so the time and tokens are never lost; a panel too narrow for even those gets None,
-    leaving Claude Code's own row, since the one thing this row could keep is lost either way.
+
+def body(task, widths, columns, now):
+    """The body of the agent's row, columns wide: its fixed cells padded to their columns' widths, its activity, then its time and tokens.
+
+    What does not fit is cut from the left part, so the time and tokens are never lost; a panel too narrow for even those gets None.
     """
     right = time_and_tokens(task, now)
     room = columns - display_width(right) - len(GAP)
     if room < 1:
         return None
-    # Until the agent has a progress summary, Claude Code sends its description as its label.
-    activity = task["label"] if task["label"] != task["description"] else ""
     padded = [pad(cell, width) for cell, width in zip(fixed_cells(task), widths)]
-    # Without its trailing padding, so that a … marks only text that was cut.
-    left = clip(GAP.join(padded + [activity]).rstrip(), room)
+    # Without trailing whitespace, so that a … marks only text that was cut.
+    left = clip(GAP.join(padded + [activity(task)]).rstrip(), room)
     return pad(left, columns - display_width(right)) + right
 
 
 def main(stdin, stdout, now):
-    """Read the panel of background agents from stdin and print the body of each running agent's row to stdout.
+    """Read the panel of background agents from stdin and print the body of each agent's row to stdout, running or stopped.
 
     now is the time in milliseconds since the epoch.
     """
     panel = json.load(stdin)
-    # Claude Code sends no end time, so only its own row can time a stopped agent.
-    running = [task for task in panel["tasks"] if task["status"] == "running"]
-    widths = [max(map(display_width, column)) for column in zip(*map(fixed_cells, running))]
-    for task in running:
-        content = body(task, widths, panel["columns"], now)
-        if content is not None:
-            print(json.dumps({"id": task["id"], "content": content}), file=stdout)
+    widths = [max(map(display_width, column)) for column in zip(*map(fixed_cells, panel["tasks"]))]
+    contents = {task["id"]: body(task, widths, panel["columns"], now) for task in panel["tasks"]}
+    # Claude Code draws its own row for a task given no line, which would not line up with these, so either every row or none.
+    if None not in contents.values():
+        for task_id, content in contents.items():
+            print(json.dumps({"id": task_id, "content": content}), file=stdout)
 
 
 if __name__ == "__main__":
