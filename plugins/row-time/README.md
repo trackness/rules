@@ -54,7 +54,7 @@ Built and run against Claude Code 2.1.322. What the mod does not yet do right:
 
 - **A reply in the ctrl+o view.** Claude Code draws its own time and model on a line above each reply there, in place of the blank line it draws in the normal view, and tells a mod nothing of it, so the reply's time lands one line below its `⏺`. Claude Code's code draws the same line above a reply in the normal view while its `showMessageTimestamps` setting is on. A fullscreen session without `--verbose` shows it.
 - **A run of tool calls drawn unfolded.** Under `--verbose`, and in the ctrl+o view of the non-fullscreen screen, Claude Code draws a run's calls as rows of their own inside the run. The run and its first call then each carry a time, two on one line. A fullscreen session without `--verbose` does not show it.
-- **The line for agents launched in the background.** The line Claude Code draws when it launches agents in the background, such as `⏺ 4 background agents launched`, shows no time.
+- **The row for agents launched in one message.** When Claude launches two or more agents in one message, Claude Code draws them as one row of their own, such as `⏺ 4 background agents launched`, or `Running 2 agents…` and then `2 agents finished` for agents that run in the foreground. That row shows no time because Claude Code hands it to no mod: it draws the row with the Agent tool's own renderer for a group and raises `ui.render` for neither the row nor the calls in it. The transcript does record the time, on the line of each call, so what a mod is missing is a `ui.render` component for the row. Under `--verbose` and in the ctrl+o view Claude Code draws each call as a tool-call row of its own, which shows its time.
 
 ## Requirements
 
