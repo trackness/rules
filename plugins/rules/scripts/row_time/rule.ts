@@ -57,19 +57,20 @@ async function transcriptsOf($: EngineInterface, transcript: string): Promise<st
  * The timestamp a transcript file records for a row, or undefined where it holds no record of the row. The time of
  * every row read on the way is noted.
  */
-async function timestampIn($: EngineInterface, file: string, recorded: Map<string, string>, id: string): Promise<string | undefined> {
+async function timestampIn($: EngineInterface, file: string, linesRead: Map<string, number>, recorded: Map<string, string>, id: string): Promise<string | undefined> {
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes. Claude Code hands
   // back only the first 4 MiB of what tail writes, so the file is read a stretch at a time, each from the line after
   // the last. Claude Code aborts the read under way for a drawing it drops, which is no record found: the row is read
   // again when next drawn.
-  for (let linesRead = 0; ; ) {
-    const { stdout } = await $.process.run(['tail', '-n', `+${linesRead + 1}`, file]).catch(() => ({ stdout: '' }))
+  for (;;) {
+    const read = linesRead.get(file) ?? 0
+    const { stdout } = await $.process.run(['tail', '-n', `+${read + 1}`, file]).catch(() => ({ stdout: '' }))
     // What follows the last line break is a line cut short, or nothing.
     const lines = stdout.split('\n').slice(0, -1)
     if (lines.length === 0) return undefined
     for (const line of lines) noteTimes(line, recorded)
+    linesRead.set(file, read + lines.length)
     if (recorded.has(id)) return recorded.get(id)
-    linesRead += lines.length
   }
 }
 
@@ -78,10 +79,10 @@ async function timestampIn($: EngineInterface, file: string, recorded: Map<strin
  * made now unless an earlier one has the row, which is then kept, in the times file too. Undefined until the
  * transcript holds the row.
  */
-async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, recorded: Map<string, string>, id: string): Promise<string | undefined> {
+async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, linesRead: Map<string, number>, recorded: Map<string, string>, id: string): Promise<string | undefined> {
   if (kept.has(id)) return kept.get(id)
   const toRead = recorded.has(id) ? [] : await transcriptsOf($, transcript)
-  for (const file of toRead) if (await timestampIn($, file, recorded, id)) break
+  for (const file of toRead) if (await timestampIn($, file, linesRead, recorded, id)) break
   const timestamp = recorded.get(id)
   if (timestamp) {
     kept.set(id, timestamp)
@@ -97,6 +98,7 @@ export const register: Register = (on) => {
   let kept = new Map<string, string>()
   // The time of every row in the lines read so far, by the id of the row: the rows drawn, and those not yet drawn.
   const recorded = new Map<string, string>()
+  const linesRead = new Map<string, number>()
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
     kept = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
@@ -119,7 +121,7 @@ export const register: Register = (on) => {
     if (e.component === 'ToolResult') return h(Box, { flexDirection: 'row' }, h(Text, null, NO_TIME), await next(e)) as RenderElement
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
-    const timestamp = await recordedTimestamp($, transcript, kept, recorded, id)
+    const timestamp = await recordedTimestamp($, transcript, kept, linesRead, recorded, id)
     const time = h(Text, { dimColor: true }, `${timestamp ? timeOfDay(timestamp) : NOT_YET} `)
     // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside
     // the ⏺. Above a subagent's prompt from main it draws its "From main" label in place of the blank line.
