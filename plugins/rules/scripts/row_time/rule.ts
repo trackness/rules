@@ -14,7 +14,7 @@ export const register: Register = (on) => {
   on('ui.render', async ($, e, next) => {
     // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
     const { stdout } = await $.process.run(['tail', '-n', '+1', transcript])
-    const record = stdout.split('\n').find((line) => line.includes(`"id":"${e.requestId}"`))
+    const record = stdout.split('\n').find((line) => line.includes(`"id":"${e.requestId}"`) || line.includes(`"uuid":"${e.requestId}"`))
     const { Box, Text } = $.ui.resolve(e)
     const time = h(Text, { dimColor: true }, `${timeOfDay(JSON.parse(record as string).timestamp)} `)
     // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside the ⏺.
