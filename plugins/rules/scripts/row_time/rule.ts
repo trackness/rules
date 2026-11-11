@@ -11,11 +11,12 @@ export const register: Register = (on) => {
     transcript = e.transcript_path
     return next(e)
   })
-  on('ui.render', async ($, e) => {
+  on('ui.render', async ($, e, next) => {
     // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
     const { stdout } = await $.process.run(['tail', '-n', '+1', transcript])
     const record = stdout.split('\n').find((line) => line.includes(`"id":"${e.requestId}"`))
-    const { Text } = $.ui.resolve(e)
-    return h(Text, null, `${timeOfDay(JSON.parse(record as string).timestamp)} `) as RenderElement
+    const { Box, Text } = $.ui.resolve(e)
+    const time = h(Text, null, `${timeOfDay(JSON.parse(record as string).timestamp)} `)
+    return h(Box, { flexDirection: 'row' }, time, await next(e)) as RenderElement
   })
 }
