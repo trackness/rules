@@ -39,8 +39,14 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0) {
     if (text === undefined) throw new Error(`ENOENT: no such file or directory, open '${e.path}'`)
     return { value: text }
   })
-  on('fs.write', ($, e) => {
-    files[e.path] = e.text
+  // Claude Code carries out the writes a plugin has under way at once in no set order: here, the latest first.
+  const writesUnderWay: (() => void)[] = []
+  on('fs.write', async ($, e) => {
+    writesUnderWay.push(() => {
+      files[e.path] = e.text
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    writesUnderWay.pop()?.()
     return { value: undefined }
   })
   on('fs.list', ($, e) => {
@@ -387,4 +393,12 @@ test('a row that waited on another row\'s read, which Claude Code cut short, rea
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const [, ui] = await Promise.all([drawSkillRow($), drawReplyRow($)])
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:32:41.970Z')} `)
+})
+
+test('the file keeps the time of every row drawn at once', async ($, on) => {
+  const files: Record<string, string> = { [TRANSCRIPT]: REPLY_SESSION }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  await Promise.all([drawSkillRow($), drawReplyRow($)])
+  expect(files[TIMES]).toBe(`${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:32:41.970Z\n`)
 })
