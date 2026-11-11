@@ -264,3 +264,15 @@ test('what Claude Code draws outside the transcript is left as it draws it: the 
   const drawn = [await spinner.drawn(), await band.drawn(), await hint.drawn(), await mode.drawn()]
   expect(drawn.map((tree) => tree.type)).toEqual(['engine', 'engine', 'engine', 'engine'])
 })
+
+test('a subagent\'s handback call, which Claude Code draws nothing for, shows no time', async ($, on) => {
+  // A subagent ends by calling SubagentHandback, and its view draws no row for the call.
+  const subagent = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a/subagents/agent-ae990d03dc2e2a409.jsonl'
+  const input = { message: 'Ran `echo hi` in Bash. Output: `hi`. Reply: done.' }
+  const handback = { tool_use_id: 'toolu_01NJwJzs2uPrjqkMe3XH82yR', tool: 'SubagentHandback', input, isRunning: false, isErrored: false, isInterrupted: false, isExpanded: false }
+  const call = assistant('6ad49b99-b521-4ebf-8f38-fb98b8ca8a1a', '2026-11-10T10:02:09.118Z', { type: 'tool_use', id: handback.tool_use_id, name: 'SubagentHandback', input })
+  host(on, { [TRANSCRIPT]: SKILL_SESSION, [subagent]: transcript(call) })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: handback.tool_use_id, props: handback })
+  expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
