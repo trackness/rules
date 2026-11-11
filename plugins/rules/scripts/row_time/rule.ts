@@ -17,6 +17,7 @@ export const register: Register = (on) => {
     const record = stdout.split('\n').find((line) => line.includes(`"id":"${e.requestId}"`))
     const { Box, Text } = $.ui.resolve(e)
     const time = h(Text, { dimColor: true }, `${timeOfDay(JSON.parse(record as string).timestamp)} `)
+    // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside the ⏺.
     return h(Box, { flexDirection: 'row' }, h(Box, { marginTop: 1 }, time), await next(e)) as RenderElement
   })
 }
