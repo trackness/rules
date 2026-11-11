@@ -54,8 +54,8 @@ async function transcriptsOf($: EngineInterface, transcript: string): Promise<st
 }
 
 /**
- * The timestamp a transcript file records for a row, or undefined where it holds no record of the row. The time of
- * every row read on the way is noted.
+ * The timestamp a transcript file records for a row in the lines not read before, or undefined where they hold no
+ * record of the row. The time of every row read on the way is noted, and the lines are counted as read.
  */
 async function timestampIn($: EngineInterface, file: string, linesRead: Map<string, number>, recorded: Map<string, string>, id: string): Promise<string | undefined> {
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes. Claude Code hands
@@ -98,6 +98,7 @@ export const register: Register = (on) => {
   let kept = new Map<string, string>()
   // The time of every row in the lines read so far, by the id of the row: the rows drawn, and those not yet drawn.
   const recorded = new Map<string, string>()
+  // How many lines of each transcript file have been read, by the file: its next read starts at the line after them.
   const linesRead = new Map<string, number>()
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path

@@ -167,13 +167,9 @@ test('a row shows --:-- until the transcript has its time', async ($, on) => {
   expect((await ui.find({ type: 'Text' }))?.text).toBe('--:-- ')
 })
 
-test('once the transcript has the time, the row is redrawn in place with it', async ($, on) => {
-  const clock = mock.clock(on)
-  const files = { [TRANSCRIPT]: BEFORE_THE_CALL }
-  host(on, files)
-  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  const ui = await drawSkillRow($)
-  // Claude Code adds the call to the conversation, and writes it to the transcript a moment later.
+// Claude Code adds the Skill call to the conversation, and a moment later writes it to the transcript, as its next
+// line. The rows are drawn again by then.
+async function recordSkillCall($: Engine, clock: ReturnType<typeof mock.clock>, files: Record<string, string>) {
   const call = { type: 'tool_use', id: SKILL_CALL.tool_use_id, name: 'Skill', input: SKILL_CALL.input } as const
   await $.session.append({
     message: { type: 'assistant', role: 'assistant', content: [call] },
@@ -183,6 +179,15 @@ test('once the transcript has the time, the row is redrawn in place with it', as
   })
   files[TRANSCRIPT] += transcript(assistant('a2dc512c-f195-45f6-9351-8da543c2d09b', '2026-11-10T09:30:16.161Z', call))
   await clock.advance(1000)
+}
+
+test('once the transcript has the time, the row is redrawn in place with it', async ($, on) => {
+  const clock = mock.clock(on)
+  const files = { [TRANSCRIPT]: BEFORE_THE_CALL }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  await recordSkillCall($, clock, files)
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
 
@@ -337,16 +342,8 @@ test('a row the transcript lacked when first drawn is looked for, when drawn aga
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const ui = await drawSkillRow($)
   const ranForFirstDraw = ran.length
-  // Claude Code adds the call to the conversation, and a moment later writes it to the transcript, its third line.
-  const call = { type: 'tool_use', id: SKILL_CALL.tool_use_id, name: 'Skill', input: SKILL_CALL.input } as const
-  await $.session.append({
-    message: { type: 'assistant', role: 'assistant', content: [call] },
-    door: 'response',
-    origin: { kind: 'model', model: 'claude-opus-5-5' },
-    uuid: 'a2dc512c-f195-45f6-9351-8da543c2d09b',
-  })
-  files[TRANSCRIPT] += transcript(assistant('a2dc512c-f195-45f6-9351-8da543c2d09b', '2026-11-10T09:30:16.161Z', call))
-  await clock.advance(1000)
+  // The call is the transcript's third line.
+  await recordSkillCall($, clock, files)
   const shown = (await ui.find({ type: 'Text' }))?.text
   expect({ shown, ran: ran.slice(ranForFirstDraw) }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [['tail', '-n', '+3', TRANSCRIPT]] })
 })
