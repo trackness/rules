@@ -84,7 +84,7 @@ export const register: Register = (on) => {
     return stored
   })
   on('ui.render', async ($, e, next) => {
-    if (transcript === '') return next(e)
+    if (transcript === '' || ['Spinner', 'AbovePrompt', 'PromptHint', 'SessionMode'].includes(e.component)) return next(e)
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
     const timestamp = await recordedTimestamp($, transcript, kept, id)
