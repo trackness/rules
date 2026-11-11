@@ -23,7 +23,28 @@ function fromFirstStatement(script: string): string {
 
 /** The name a saved workflow runs by: its meta's name, not its file's, if meta comes first, as Claude Code requires to load it. */
 function metaName(script: string): string | undefined {
-  return /^export\s+const\s+meta\s*=\s*\{[\s\S]*?\bname['"]?\s*:\s*(['"`])(.*?)\1/.exec(fromFirstStatement(script))?.[2]
+  const declared = /^export\s+const\s+meta([\s\S]*)/.exec(fromFirstStatement(script))?.[1]
+  if (declared === undefined) return undefined
+  // A string or comment is one token, so a name or bracket written inside one is never read as the meta's own.
+  // shortcut: takes a string as written, its escapes undecoded; decode them if a saved name ever needs one.
+  const tokens = /(['"`])((?:\\[\s\S]|(?!\1)[^\\])*)\1|\/\/.*|\/\*[\s\S]*?\*\/|[\w$]+|\S/g
+  let depth = 0
+  let last = ''
+  let isNameValue = false
+  let name: string | undefined
+  // text is a string's content, and undefined for any other token.
+  for (const [token, , text] of declared.matchAll(tokens)) {
+    if (token.startsWith('//') || token.startsWith('/*')) continue
+    // Before the object come =, then any parentheses around it, as Claude Code requires meta to be an object.
+    if (depth === 0 && (last === '' ? token !== '=' : token !== '(' && token !== '{')) return undefined
+    if (isNameValue) name = text
+    isNameValue = depth === 1 && token === ':' && last === 'name'
+    if (token === '{' || token === '[') depth++
+    // The object read to its end, since Claude Code keeps the last of two name keys.
+    else if ((token === '}' || token === ']') && --depth === 0) return name
+    last = text ?? token
+  }
+  return undefined
 }
 
 /** The path with / for every separator, so a Windows path walks as a POSIX one does. */

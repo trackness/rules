@@ -10,10 +10,11 @@ import pytest
 GIT_VERSION = tuple(int(part) for part in re.findall(r"\d+", subprocess.run(["git", "--version"], capture_output=True, text=True).stdout)[:3])
 needs_config_hooks = pytest.mark.skipif(GIT_VERSION < (2, 54, 0), reason="git runs hooks defined in config from 2.54.0")
 needs_zsh = pytest.mark.skipif(shutil.which("zsh") is None, reason="zsh is not installed")
-# git in the tests reads none of the user's config, global, system or in the environment, such as a global core.hooksPath, and commits as a test identity.
+# The environment of every subprocess a test starts holds only PATH, so nothing of the user's, such as a secret, a GIT_DIR or a global core.hooksPath, reaches git or
+# is printed when pytest shows a failed call; git reads no config file, and commits as a test identity.
+BASE_ENV = {"PATH": os.environ["PATH"], "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1"}
 GIT_ENV = {
-    **{name: value for name, value in os.environ.items() if not name.startswith("GIT_CONFIG")}, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
-    "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com",
+    **BASE_ENV, "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com",
 }
 # Git config the session's environment already holds, such as the user's own or another rule's.
 EXISTING_GIT_CONFIG = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "test.kept", "GIT_CONFIG_VALUE_0": "yes"}
@@ -28,7 +29,7 @@ def start_session(env_file, script):
     """Run script as Claude Code's SessionStart hook does, with env_file as its CLAUDE_ENV_FILE, and return env_file."""
     env_file.touch()  # Claude Code hands the hook an existing file to append to
     hook_input = json.dumps({"hook_event_name": "SessionStart", "source": "startup"})
-    result = subprocess.run([script], input=hook_input, env={**os.environ, "CLAUDE_ENV_FILE": str(env_file)}, capture_output=True, text=True)
+    result = subprocess.run([script], input=hook_input, env={**BASE_ENV, "CLAUDE_ENV_FILE": str(env_file)}, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
     return env_file
 

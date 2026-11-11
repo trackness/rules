@@ -29,7 +29,13 @@ def off_a_work_branch(directory):
         # git detaches HEAD while it rebases a branch, and keeps the rebase's state in one of these two directories.
         rebase_state = git(directory, "rev-parse", "--path-format=absolute", "--git-path", "rebase-merge", "--git-path", "rebase-apply").stdout.splitlines()
         return None if any(Path(path).is_dir() for path in rebase_state) else "on a detached HEAD"
-    return f"on {branch}" if branch in SHARED_BRANCHES else None
+    if branch not in SHARED_BRANCHES:
+        return None
+    # git switch -c refuses to run in a merge, cherry-pick or revert stopped at a conflict, which keeps its state in one of these files.
+    stopped = git(
+        directory, "rev-parse", "--path-format=absolute", "--git-path", "MERGE_HEAD", "--git-path", "CHERRY_PICK_HEAD", "--git-path", "REVERT_HEAD"
+    ).stdout.splitlines()
+    return None if any(Path(path).is_file() for path in stopped) else f"on {branch}"
 
 
 def register(env_file, stdout):
@@ -71,6 +77,9 @@ def main(stdin, stdout, stderr, env_file=None):
     # A file git ignores is on no branch; check-ignore exits 0 for one.
     if not where or git(directory, "check-ignore", "-q", path).returncode == 0:
         return 0
+    # Nor is a file in the git directory, such as .git/config, where check-ignore fails.
+    if git(directory, "rev-parse", "--is-inside-work-tree").stdout.strip() == "false":
+        return 0
     print(
         f"Blocked: work happens only on a branch, and this file's repository is {where}. "
         "Create a branch with git switch -c <type>/<description>, then make the change there.",
@@ -81,4 +90,4 @@ def main(stdin, stdout, stderr, env_file=None):
 
 if __name__ == "__main__":
     # git runs this script as its pre-commit hook with the argument pre-commit; Claude Code runs it with no arguments
-    sys.exit(pre_commit(sys.stderr) if sys.argv[1:2] == ["pre-commit"] else main(sys.stdin, sys.stdout, sys.stderr, os.environ.get("CLAUDE_ENV_FILE")))
+    sys.exit(pre_commit(sys.stderr) if sys.argv[1:2] == ["pre-commit"] else main(sys.stdin.buffer, sys.stdout, sys.stderr, os.environ.get("CLAUDE_ENV_FILE")))

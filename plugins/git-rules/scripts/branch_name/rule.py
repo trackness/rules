@@ -14,6 +14,9 @@ import git_hook
 # shortcut: git after sudo or env options, such as sudo -u root git, is not checked; skip those options if Claude runs git that way
 COMMAND_PREFIXES = ("sudo", "env")
 ENVIRONMENT_ASSIGNMENT = r"[A-Za-z_]\w*="
+# A word made only of these characters ends a simple command, such as && or a newline, or is a redirection, such as > or the >& of 2>&1.
+OPERATOR_CHARACTERS = "();<>|&\n"
+REDIRECTION = r"&?[<>]+[&|]?"
 GIT_OPTIONS_WITH_VALUE = ("-c", "-C")
 PUSH_OPTIONS_WITH_VALUE = ("-o", "--push-option", "--recurse-submodules", "--receive-pack", "--exec")
 # shortcut: --orphan, and git branch with -f or --track, are not checked; add them if Claude creates branches that way
@@ -37,12 +40,42 @@ def option_values(args, options):
     return [args[i + 1] for i, arg in enumerate(args[:-1]) if arg in options]
 
 
+# shortcut: a line of a heredoc's body is read as a command, and a quoted word that starts with # as the start of a comment; parse quotes as the shell does if either misreads Claude's commands
+def simple_commands(cmd):
+    """The words of each simple command in the shell command cmd, without redirections and comments; raises ValueError on an unbalanced quote."""
+    # A backslash before a newline joins the two lines, where shlex would keep the newline as a word.
+    lexer = shlex.shlex(cmd.replace("\\\n", ""), posix=True, punctuation_chars=OPERATOR_CHARACTERS)
+    # A newline ends a command, and # starts a comment only as the first character of a word, which shlex's own comments do not check.
+    lexer.whitespace, lexer.whitespace_split, lexer.commenters = " \t\r", True, ""
+    tokens = iter(lexer)
+    commands = [[]]
+    for token in tokens:
+        if token.startswith("#"):
+            next((rest for rest in tokens if rest == "\n"), None)
+            commands.append([])
+        elif not token or set(token) - set(OPERATOR_CHARACTERS):
+            commands[-1].append(token)
+        elif re.fullmatch(REDIRECTION, token):
+            # Neither the file a redirection names nor the file descriptor before it, the 2 of 2>&1, is a word of the command.
+            if commands[-1] and commands[-1][-1].isdigit():
+                commands[-1].pop()
+            next(tokens, None)
+        else:
+            commands.append([])
+    return commands
+
+
 def new_branch_names(cmd):
     """The names of the branches the shell command cmd creates, renames a branch to, or pushes to by a <src>:<dst> refspec."""
     try:
-        words = shlex.split(cmd)
+        commands = simple_commands(cmd)
     except ValueError:  # an unbalanced quote, such as an apostrophe in a heredoc body, leaves no words to read
         return []
+    return [name for words in commands for name in command_branch_names(words)]
+
+
+def command_branch_names(words):
+    """The names of the branches the simple command with these words creates, renames a branch to, or pushes to by a <src>:<dst> refspec."""
     while words and (words[0] in COMMAND_PREFIXES or re.match(ENVIRONMENT_ASSIGNMENT, words[0])):
         words = words[1:]
     program = os.path.basename(words[0]) if words else ""
@@ -130,4 +163,4 @@ def main(stdin, stdout, stderr, env_file=None):
 
 if __name__ == "__main__":
     # git runs this script as its pre-push hook with the argument pre-push, then the remote's name and URL; Claude Code runs it with no arguments
-    sys.exit(pre_push(sys.stdin, sys.stderr) if sys.argv[1:2] == ["pre-push"] else main(sys.stdin, sys.stdout, sys.stderr, os.environ.get("CLAUDE_ENV_FILE")))
+    sys.exit(pre_push(sys.stdin, sys.stderr) if sys.argv[1:2] == ["pre-push"] else main(sys.stdin.buffer, sys.stdout, sys.stderr, os.environ.get("CLAUDE_ENV_FILE")))

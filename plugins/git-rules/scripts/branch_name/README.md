@@ -17,6 +17,9 @@ Checked:
 - the `<dst>` of a `git push` refspec `<src>:<dst>`, the remote branch it creates or updates, with `refs/heads/` stripped; a `<dst>` that does not start with `refs/` is taken as a branch
 - the `<name>` of `gh pr checkout <number> -b <name>` or `--branch <name>`, the local branch it creates
 - each of these after `sudo`, `env` or an environment assignment such as `GIT_TRACE=1`, with git or gh run by full path, such as `/usr/bin/git`, and, for git, after git options given as one word, such as `--git-dir=<path>`, or as `-C <path>` or `-c <setting>`
+- each of these in every command of the Bash call, such as one after `cd <dir> &&`, `;`, `|` or a newline, or in parentheses, with its redirections, such as `2>&1` or `> branches.txt`, and comments left out
+
+Each line of a heredoc's body outside quotes, such as the message of `git commit -F - <<'EOF'` but not of `git commit -m "$(cat <<'EOF' … EOF)"`, is read as a command too, so a line there that would create a badly named branch blocks the call, though the shell passes it only as text.
 
 Allowed:
 
@@ -38,8 +41,9 @@ The check reads only the commands listed under Checked, so a branch made any oth
 - a value joined to its option, such as `--create=<name>`, `-b<name>` or `--branch=<name>`
 - a git option other than `-C` and `-c` with its value as the next word, such as `--git-dir <path>`
 - a git alias, such as `git co -b <name>`, and the gh alias `gh pr co`
-- git or gh after options to `sudo` or `env`, such as `sudo -u root git`, or run by another command, such as `bash -c` or `xargs`
-- a command with an unbalanced quote, such as an apostrophe in a heredoc body, which cannot be split into words
+- git or gh after options to `sudo` or `env`, such as `sudo -u root git`, after a shell keyword, such as `then` or `do`, or run by another command, such as `bash -c` or `xargs`
+- a Bash call with an unbalanced quote, such as an apostrophe in a heredoc body, which cannot be split into words, so none of its commands is read
+- the rest of a line after a quoted word that starts with `#`, such as `git commit -m '#12 fix' && git checkout -b <name>`, because the word is taken for the start of a comment
 - branches created other than through Bash, such as the branch Claude Code makes for an isolated worktree
 
 The name is checked when the branch is made, before it is pushed, while renaming it is still a local change. A push refspec is checked too, because it can give the remote branch a name that was never checked locally.

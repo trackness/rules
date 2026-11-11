@@ -25,7 +25,7 @@ def register(env_file, stdout):
 
 def main(message_file, stderr):
     """Check the message git passes to a commit-msg hook and return git's exit code: 1 rejects the commit, with a reason on stderr."""
-    if conventional(Path(message_file).read_text()):
+    if conventional(Path(message_file).read_text(encoding="utf-8", errors="replace")):
         return 0
     print(
         "Rejected: the commit message does not follow Conventional Commits. Start it with <type>[optional scope][!]: <description>, "

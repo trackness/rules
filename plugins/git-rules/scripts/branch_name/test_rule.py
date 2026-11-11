@@ -1,14 +1,13 @@
 """Tests for "Conventional Branch names". Run from the repo root: uv run pytest"""
 import io
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from ..git_testing import git, needs_config_hooks, needs_zsh, run_in_session
+from ..git_testing import GIT_ENV, git, needs_config_hooks, needs_zsh, run_in_session
 from .rule import conventional, main, new_branch_names
 
 SCRIPT = Path(__file__).resolve().parent / "rule.py"
@@ -45,6 +44,10 @@ def git_in_session(tmp_path, repo, *args, shell="bash", script=SCRIPT):
     pytest.param("feature/Add-Login-Page", id="uppercase"),
     pytest.param("feature/add-login-", id="trailing_hyphen"),
     pytest.param("feature/upgrade-python-3.15", id="dot_outside_release"),
+    pytest.param("release/v1..2", id="two_dots_in_a_row"),
+    pytest.param("feature/new--login", id="two_hyphens_in_a_row"),
+    pytest.param("feature/-new-login", id="leading_hyphen"),
+    pytest.param("feature/auth/login", id="slash_in_description"),
 ])
 def test_not_conventional(name):
     assert not conventional(name)
@@ -107,6 +110,23 @@ def test_conventional(name):
     pytest.param("cat > notes.txt <<'EOF'\nDon't stop.\nEOF", [], id="unbalanced_quote_in_heredoc"),
     pytest.param("/usr/bin/gh pr checkout 5 -b Add_Login", ["Add_Login"], id="gh_by_full_path"),
     pytest.param("git --git-dir=/repo/.git checkout -b Add_Login", ["Add_Login"], id="git_option_as_one_word"),
+    pytest.param("cd /repo && git checkout -b Add_Login", ["Add_Login"], id="after_and"),
+    pytest.param("git status; git checkout -b Add_Login", ["Add_Login"], id="after_semicolon"),
+    pytest.param("git status\ngit checkout -b Add_Login", ["Add_Login"], id="on_a_second_line"),
+    pytest.param("(git checkout -b Add_Login)", ["Add_Login"], id="in_a_subshell"),
+    pytest.param("git branch -m Add_Login && git checkout main", ["Add_Login"], id="rename_before_another_command"),
+    pytest.param("git checkout \\\n  -b Add_Login", ["Add_Login"], id="continued_on_the_next_line"),
+    pytest.param("git checkout 2>/dev/null -b Add_Login", ["Add_Login"], id="options_after_a_redirection"),
+    pytest.param("# make the branch\ngit checkout -b Add_Login", ["Add_Login"], id="after_a_comment_line"),
+    pytest.param("git branch 2>&1", [], id="branch_list_redirected_to_a_file_descriptor"),
+    pytest.param("git branch > branches.txt", [], id="branch_list_redirected_to_a_file"),
+    pytest.param("git branch | grep feature", [], id="branch_list_piped"),
+    pytest.param("git branch -D old && git commit -m 'feat: thing'", [], id="option_of_a_later_command"),
+    pytest.param("git checkout main && gh pr create -B main -b 'Fixes the bug'", [], id="gh_option_of_a_later_command"),
+    pytest.param("git checkout -b feature/add-login # the -b flag makes it", ["feature/add-login"], id="comment_after_the_command"),
+    pytest.param("git checkout -b feature/add-login # made here\ngit branch Add_Login", ["feature/add-login", "Add_Login"], id="line_after_a_comment"),
+    # A limit the README lists: a line of a heredoc's body is read as a command, even with the delimiter quoted.
+    pytest.param("cat <<'EOF'\ngit branch Add_Login\nEOF", ["Add_Login"], id="line_in_a_heredoc"),
     # Not read, as the README lists: a push through Claude's Bash commands still meets the pre-push check.
     pytest.param("git checkout --orphan Add_Login", [], id="unread_checkout_orphan"),
     pytest.param("git switch --orphan Add_Login", [], id="unread_switch_orphan"),
@@ -130,6 +150,8 @@ def test_conventional(name):
     pytest.param("sudo -u root git checkout -b Add_Login", [], id="unread_sudo_option"),
     pytest.param("bash -c 'git checkout -b Add_Login'", [], id="unread_bash_c"),
     pytest.param("xargs git checkout -b Add_Login", [], id="unread_xargs"),
+    pytest.param("git commit -m '#12 fix' && git checkout -b Add_Login", [], id="unread_after_a_quoted_word_starting_with_hash"),
+    pytest.param("if true; then git checkout -b Add_Login; fi", [], id="unread_after_a_shell_keyword"),
 ])
 def test_new_branch_names(cmd, names):
     assert new_branch_names(cmd) == names
@@ -152,6 +174,13 @@ def test_main_block_gives_a_reason():
     stderr = io.StringIO()
     main(tool_call("git checkout -b Add_Login"), io.StringIO(), stderr)
     assert "Blocked: branch name Add_Login does not follow Conventional Branch 1.0.0." in stderr.getvalue()
+
+
+def test_script_reads_its_input_as_utf_8_whatever_the_locale():
+    """Claude Code sends UTF-8, which Python 3.9 to 3.14 would decode with the locale's encoding, here ASCII, and fail with exit 1, which blocks nothing."""
+    hook_input = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git checkout -b Café"}}, ensure_ascii=False)
+    result = subprocess.run([SCRIPT], input=hook_input.encode(), env={**GIT_ENV, "PYTHONIOENCODING": "ascii"}, capture_output=True)
+    assert result.returncode == 2, result.stderr
 
 
 @needs_config_hooks
@@ -314,7 +343,7 @@ def test_session_start_without_env_file_tells_claude_the_push_check_is_inactive(
 
     Claude Code adds a SessionStart hook's stdout at exit 0 to Claude's context; Claude never sees its stderr.
     """
-    env = {name: value for name, value in os.environ.items() if name != "CLAUDE_ENV_FILE"}
+    env = {name: value for name, value in GIT_ENV.items() if name != "CLAUDE_ENV_FILE"}
     result = subprocess.run([SCRIPT], input=json.dumps({"hook_event_name": "SessionStart", "source": "startup"}), env=env, capture_output=True, text=True)
     assert result.returncode == 0
     assert len(result.stdout.splitlines()) == 1 and "not active" in result.stdout
