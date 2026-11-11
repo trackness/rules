@@ -2,7 +2,6 @@
 import io
 import json
 import os
-import re
 import shlex
 import shutil
 import subprocess
@@ -10,30 +9,16 @@ from pathlib import Path
 
 import pytest
 
+from ..git_testing import EXISTING_GIT_CONFIG, GIT_ENV, git, needs_config_hooks, needs_zsh, run_in_session, start_session
 from .rule import conventional, main, new_branch_names
 
-GIT_VERSION = tuple(int(part) for part in re.findall(r"\d+", subprocess.run(["git", "--version"], capture_output=True, text=True).stdout)[:3])
-needs_config_hooks = pytest.mark.skipif(GIT_VERSION < (2, 54, 0), reason="git runs hooks defined in config from 2.54.0")
-needs_zsh = pytest.mark.skipif(shutil.which("zsh") is None, reason="zsh is not installed")
 SCRIPT = Path(__file__).resolve().parent / "rule.py"
 COMMIT_MESSAGE_RULE = SCRIPT.parent.parent / "commit_message" / "rule.py"
-# git in the tests reads none of the user's config, global, system or in the environment, such as a global core.hooksPath, and commits as a test identity.
-GIT_ENV = {
-    **{name: value for name, value in os.environ.items() if not name.startswith("GIT_CONFIG")}, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
-    "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com",
-}
-# Git config the session's environment already holds, such as the user's own.
-EXISTING_GIT_CONFIG = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "test.kept", "GIT_CONFIG_VALUE_0": "yes"}
 
 
 def tool_call(cmd):
     """A Bash tool call as Claude Code sends it to the hook on stdin."""
     return io.StringIO(json.dumps({"tool_name": "Bash", "tool_input": {"command": cmd}}))
-
-
-def git(*args):
-    """Run git with the given arguments for a test's setup, and return its output."""
-    return subprocess.run(["git", *map(str, args)], env=GIT_ENV, check=True, capture_output=True, text=True).stdout
 
 
 def repo_with_remote(tmp_path):
@@ -51,24 +36,9 @@ def remote_branches(remote):
     return git("-C", remote, "for-each-ref", "--format=%(refname:short)", "refs/heads/").split()
 
 
-def start_session(env_file, script=SCRIPT):
-    """Run the script as Claude Code's SessionStart hook does, with env_file as its CLAUDE_ENV_FILE, and return env_file."""
-    env_file.touch()  # Claude Code hands the hook an existing file to append to
-    hook_input = json.dumps({"hook_event_name": "SessionStart", "source": "startup"})
-    result = subprocess.run([script], input=hook_input, env={**os.environ, "CLAUDE_ENV_FILE": str(env_file)}, capture_output=True, text=True)
-    assert result.returncode == 0, result.stderr
-    return env_file
-
-
-def run_in_session(tmp_path, *command, shell="bash", script=SCRIPT, env=GIT_ENV):
-    """Start a session, then run the command as Claude's Bash tool would, with the env file sourced."""
-    session_env = start_session(tmp_path / "session.env", script)
-    return subprocess.run([shell, "-c", '. "$1" && shift && "$@"', "_", session_env, *map(str, command)], env=env, capture_output=True, text=True)
-
-
 def git_in_session(tmp_path, repo, *args, shell="bash", script=SCRIPT):
     """Start a session, then run git in repo with the given arguments as Claude's Bash tool would, with the env file sourced."""
-    return run_in_session(tmp_path, "git", "-C", repo, *args, shell=shell, script=script)
+    return run_in_session(tmp_path, script, "git", "-C", repo, *args, shell=shell)
 
 
 @pytest.mark.parametrize("name", [
@@ -295,7 +265,7 @@ def test_repository_pre_push_hook_still_runs_after_a_refusal(tmp_path):
     repository_hook.chmod(0o755)
     git("-C", repo, "branch", "Bad_Name")
     # GIT_TRACE logs each hook git runs, in order.
-    result = run_in_session(tmp_path, "env", "GIT_TRACE=1", "git", "-C", repo, "push", "-q", "origin", "Bad_Name")
+    result = run_in_session(tmp_path, SCRIPT, "env", "GIT_TRACE=1", "git", "-C", repo, "push", "-q", "origin", "Bad_Name")
     hooks_run = [line for line in result.stderr.splitlines() if "trace: run_command:" in line and "pre-push" in line]
     assert result.returncode != 0 and ran.exists()
     assert [str(SCRIPT) in hooks_run[0], ".git/hooks/pre-push" in hooks_run[-1]] == [True, True]
@@ -314,7 +284,7 @@ def test_ways_past_the_pre_push_check_the_readme_lists(tmp_path, command):
     """Each command gets an unconventional branch onto the remote despite the registered hook, as the README's Not checked list says."""
     repo, remote = repo_with_remote(tmp_path)
     git("-C", repo, "branch", "Bad_Name")
-    assert run_in_session(tmp_path, *command(repo, remote)).returncode == 0
+    assert run_in_session(tmp_path, SCRIPT, *command(repo, remote)).returncode == 0
     assert remote_branches(remote) == ["Bad_Name"]
 
 
@@ -357,7 +327,7 @@ def test_registration_cut_short_leaves_git_working(tmp_path):
     """A shell can stop partway through the env file, such as at a line it cannot parse; what it has counted by then must leave git working."""
     repo, remote = repo_with_remote(tmp_path)
     git("-C", repo, "branch", "feature/add-login")
-    env_file = start_session(tmp_path / "session.env")
+    env_file = start_session(tmp_path / "session.env", SCRIPT)
     env_file.write_text("".join(env_file.read_text().splitlines(keepends=True)[:2]))  # the first entry, and the count that takes it in
     result = subprocess.run(
         ["bash", "-c", '. "$1" && shift && git -C "$@"', "_", env_file, repo, "push", "-q", "origin", "feature/add-login"],

@@ -1,7 +1,6 @@
 """Tests for "Conventional Commits messages". Run from the repo root: uv run pytest"""
 import io
 import os
-import re
 import shlex
 import shutil
 import subprocess
@@ -9,38 +8,17 @@ from pathlib import Path
 
 import pytest
 
+from ..git_testing import EXISTING_GIT_CONFIG, GIT_ENV, git, needs_config_hooks, needs_zsh, run_in_session
 from .rule import conventional, main, register
 
-GIT_VERSION = tuple(int(part) for part in re.findall(r"\d+", subprocess.run(["git", "--version"], capture_output=True, text=True).stdout)[:3])
-needs_config_hooks = pytest.mark.skipif(GIT_VERSION < (2, 54, 0), reason="git runs hooks defined in config from 2.54.0")
-needs_zsh = pytest.mark.skipif(shutil.which("zsh") is None, reason="zsh is not installed")
 SCRIPT = Path(__file__).resolve().parent / "rule.py"
-# git in the tests reads none of the user's config, global, system or in the environment, such as a global core.hooksPath, and commits as a test identity.
-GIT_ENV = {
-    **{name: value for name, value in os.environ.items() if not name.startswith("GIT_CONFIG")}, "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
-    "GIT_AUTHOR_NAME": "Test", "GIT_AUTHOR_EMAIL": "test@example.com", "GIT_COMMITTER_NAME": "Test", "GIT_COMMITTER_EMAIL": "test@example.com",
-}
-# Git config the session's environment already holds, such as the user's own or another rule's.
-EXISTING_GIT_CONFIG = {"GIT_CONFIG_COUNT": "1", "GIT_CONFIG_KEY_0": "test.kept", "GIT_CONFIG_VALUE_0": "yes"}
 
 
 def commit_in_session(tmp_path, message, shell="bash", script=SCRIPT):
-    """Run the script as Claude Code's SessionStart hook does, then commit in a new repo as Claude's Bash tool would, with the env file sourced."""
-    env_file, repo = tmp_path / "session.env", tmp_path / "repo"
-    env_file.touch()  # Claude Code hands the hook an existing file to append to
-    subprocess.run([script], env={**os.environ, "CLAUDE_ENV_FILE": str(env_file)}, check=True)
-    subprocess.run(["git", "init", "-q", str(repo)], env=GIT_ENV, check=True)
-    return subprocess.run(
-        [shell, "-c", '. "$1" && git -C "$2" commit --allow-empty -q -m "$3"', "_", env_file, repo, message],
-        env=GIT_ENV,
-        capture_output=True,
-        text=True,
-    )
-
-
-def git(*args):
-    """Run git with the given arguments for a test's setup, and return its output."""
-    return subprocess.run(["git", *map(str, args)], env=GIT_ENV, check=True, capture_output=True, text=True).stdout
+    """Start a session whose SessionStart hook is the script, then commit in a new repo as Claude's Bash tool would, with the env file sourced."""
+    repo = tmp_path / "repo"
+    git("init", "-q", repo)
+    return run_in_session(tmp_path, script, "git", "-C", repo, "commit", "--allow-empty", "-q", "-m", message, shell=shell)
 
 
 def repo_with_side_branch(tmp_path):
@@ -54,14 +32,6 @@ def repo_with_side_branch(tmp_path):
         git("-C", repo, "commit", "-q", "-m", message)
     git("-C", repo, "switch", "-q", "main")
     return repo
-
-
-def run_in_session(tmp_path, *command):
-    """Run the script as Claude Code's SessionStart hook does, then run the command as Claude's Bash tool would, with the env file sourced."""
-    env_file = tmp_path / "session.env"
-    env_file.touch()
-    subprocess.run([SCRIPT], env={**os.environ, "CLAUDE_ENV_FILE": str(env_file)}, check=True)
-    return subprocess.run(["bash", "-c", '. "$1" && shift && "$@"', "_", env_file, *map(str, command)], env=GIT_ENV, capture_output=True, text=True)
 
 
 def message_file(tmp_path, message):
@@ -142,7 +112,7 @@ def test_registered_hook_runs_from_a_path_with_spaces_and_quotes(tmp_path, shell
 def test_registered_hook_rejects_unconventional_message_however_given(tmp_path, command):
     repo = repo_with_side_branch(tmp_path)
     (tmp_path / "message.txt").write_text("Add login page\n")
-    result = run_in_session(tmp_path, *command(repo, tmp_path))
+    result = run_in_session(tmp_path, SCRIPT, *command(repo, tmp_path))
     assert result.returncode != 0 and "Rejected: the commit message does not follow Conventional Commits" in result.stderr
 
 
@@ -154,7 +124,7 @@ def test_repository_commit_msg_hook_still_runs_after_this_one(tmp_path):
     repository_hook.write_text(f"#!/bin/sh\ntouch '{ran}'\n")
     repository_hook.chmod(0o755)
     # GIT_TRACE logs each hook git runs, in order.
-    result = run_in_session(tmp_path, "env", "GIT_TRACE=1", "git", "-C", repo, "commit", "--allow-empty", "-q", "-m", "feat: add login page")
+    result = run_in_session(tmp_path, SCRIPT, "env", "GIT_TRACE=1", "git", "-C", repo, "commit", "--allow-empty", "-q", "-m", "feat: add login page")
     hooks_run = [line for line in result.stderr.splitlines() if "trace: run_command:" in line and "COMMIT_EDITMSG" in line]
     assert result.returncode == 0 and ran.exists()
     assert [str(SCRIPT) in hooks_run[0], ".git/hooks/commit-msg" in hooks_run[-1]] == [True, True]
@@ -178,7 +148,7 @@ def test_repository_commit_msg_hook_still_runs_after_this_one(tmp_path):
 def test_ways_past_the_commit_msg_check_the_readme_lists(tmp_path, command):
     """Each command makes a commit whose message is not conventional despite the registered hook, as the README's Not checked list says."""
     repo = repo_with_side_branch(tmp_path)
-    assert run_in_session(tmp_path, *command(repo)).returncode == 0
+    assert run_in_session(tmp_path, SCRIPT, *command(repo)).returncode == 0
 
 
 @needs_config_hooks
@@ -186,7 +156,7 @@ def test_repository_config_can_turn_the_commit_msg_check_off(tmp_path):
     """The README lists a repository's or user's hook.conventional-commits.enabled false among the ways past the check."""
     repo = repo_with_side_branch(tmp_path)
     git("-C", repo, "config", "hook.conventional-commits.enabled", "false")
-    assert run_in_session(tmp_path, "git", "-C", repo, "commit", "--allow-empty", "-q", "-m", "WIP").returncode == 0
+    assert run_in_session(tmp_path, SCRIPT, "git", "-C", repo, "commit", "--allow-empty", "-q", "-m", "WIP").returncode == 0
 
 
 @pytest.mark.parametrize("shell", ["bash", pytest.param("zsh", marks=needs_zsh)])
