@@ -53,7 +53,8 @@ function host(on: On, files: Record<string, string>) {
       return { value: { exitCode: 1, stdout: '', stderr: `${String(command)}: ${String(path)}: No such file or directory\n`, isStdoutTruncated: false, isStderrTruncated: false } }
     }
     const stdout = text.split('\n').slice(Number(from) - 1).join('\n')
-    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    // Claude Code hands a plugin the first 4 MiB of what a command writes, and drops the rest.
+    return { value: { exitCode: 0, stdout: stdout.slice(0, 4194304), stderr: '', isStdoutTruncated: stdout.length > 4194304, isStderrTruncated: false } }
   })
   return ran
 }
@@ -301,4 +302,20 @@ test('a slash command\'s output, which Claude Code draws under the command\'s ow
   const output = { command: 'tasks', args: '', text: 'Viewing agent', isErrored: false }
   const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'CommandOutput', requestId: 'b19f5b34-dba6-4810-9b4a-df2a3c88fa09', props: output })
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
+
+test('a row the transcript records past its first 4 MiB shows its time', async ($, on) => {
+  // A session in which Claude read a 410 KB log twelve times over, 5 MB of transcript, before it called the Skill tool.
+  const log = '2026-11-10T09:00:00.000Z GET /health 200\n'.repeat(10_000)
+  const reads = Array.from({ length: 12 }, (_, n) => {
+    const call = read(`toolu_01${String(n).padStart(22, '0')}`, '/srv/work/server.log')
+    return transcript(
+      assistant(`293589d0-56e7-4054-97df-${String(n).padStart(12, '0')}`, '2026-11-10T09:20:07.346Z', { type: 'tool_use', id: call.tool_use_id, name: 'Read', input: call.input }),
+      user(`ef33aa01-5c82-44ac-b682-${String(n).padStart(12, '0')}`, '2026-11-10T09:20:07.568Z', [{ type: 'tool_result', tool_use_id: call.tool_use_id, content: log }]),
+    )
+  })
+  host(on, { [TRANSCRIPT]: reads.join('') + SKILL_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
