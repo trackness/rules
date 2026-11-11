@@ -114,10 +114,12 @@ def test_script_runs_as_a_program_and_the_wired_command_is_that_file():
     script = Path(__file__).with_name("row.py")
     command = json.loads((script.parents[2] / "settings.json").read_text())["subagentStatusLine"]["command"]
     assert command.replace('"${CLAUDE_PLUGIN_ROOT}"', str(script.parents[2])) == str(script)
-    panel = {"columns": 120, "tasks": [agent(description="Révise l'authentification")]}
-    # UTF-8 bytes under the C locale: reading stdin as text would crash on Python 3.9 to 3.14.
-    result = subprocess.run([str(script)], input=json.dumps(panel, ensure_ascii=False).encode(), capture_output=True, check=True, env={"PATH": os.environ["PATH"], "LC_ALL": "C"})
-    assert json.loads(result.stdout)["id"] == "a1"
+    panel = {"columns": 120, "tasks": [agent(description="café")]}
+    # Real UTF-8 bytes with a Latin-1 stdin: reading stdin as text would turn é into Ã©.
+    result = subprocess.run([str(script)], input=json.dumps(panel, ensure_ascii=False).encode("utf-8"), capture_output=True, check=True, env={"PATH": os.environ["PATH"], "PYTHONIOENCODING": "latin-1"})
+    row = json.loads(result.stdout)
+    assert row["id"] == "a1"
+    assert cells(row["content"])[2] == "café"
 
 
 def test_description_follows_the_model():
