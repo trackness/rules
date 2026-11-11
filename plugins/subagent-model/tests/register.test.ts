@@ -19,13 +19,14 @@ const SPAWN = {
 
 const STARTED = { model: 'claude-opus-5-5', agentId: 'agent_1' }
 
-type Session = { files?: Record<string, string>; env?: Record<string, string>; cwd?: string; root?: string }
+type Session = { files?: Record<string, string>; links?: Record<string, string>; env?: Record<string, string>; cwd?: string; root?: string }
 
 // The engine beneath the plugin: every tool call it runs succeeds and every spawn it gets starts. By default the
 // session's project root is the repository /srv/work, it runs in /srv/work/pkg, and the user's home is /home/me.
-function engine(on: On, { files = {}, env = { HOME: '/home/me' }, cwd = '/srv/work/pkg', root = '/srv/work' }: Session = {}) {
+// links maps each symbolic link's path to the file it leads to.
+function engine(on: On, { files = {}, links = {}, env = { HOME: '/home/me' }, cwd = '/srv/work/pkg', root = '/srv/work' }: Session = {}) {
   const disk: Record<string, string> = { '/srv/work/.git/HEAD': 'ref: refs/heads/main\n', ...files }
-  const paths = Object.keys(disk)
+  const paths = [...Object.keys(disk), ...Object.keys(links)]
   on('tool.call', () => ({ result: {} }))
   on('agent.spawn', () => STARTED)
   on('session.cwd', () => ({ value: cwd }))
@@ -35,13 +36,21 @@ function engine(on: On, { files = {}, env = { HOME: '/home/me' }, cwd = '/srv/wo
   const at = (path: string) => path.replace(/^.*(?=[A-Z]:\/)/, '')
   on('fs.exists', ($, e) => ({ value: paths.some((path) => path === at(e.path) || path.startsWith(`${at(e.path)}/`)) }))
   on('fs.list', ($, e) => {
-    const inside = paths.filter((path) => path.startsWith(`${at(e.path)}/`))
+    const dir = at(e.path)
+    const inside = paths.filter((path) => path.startsWith(`${dir}/`))
     if (inside.length === 0) throw new Error(`ENOENT: ${e.path}`)
-    const names = inside.map((path) => path.slice(at(e.path).length + 1)).filter((name) => !name.includes('/'))
-    return { value: names.map((name) => ({ name, kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false })) }
+    const names = inside.map((path) => path.slice(dir.length + 1)).filter((name) => !name.includes('/'))
+    // A listing describes each entry itself, a link not followed: a link is no file, and nothing looks up its target's size.
+    const entry = (name: string) => {
+      const path = `${dir}/${name}`
+      return path in links
+        ? { name, kind: 'other' as const, size: 0, mtimeMs: 0, isLink: true }
+        : { name, kind: 'file' as const, size: new TextEncoder().encode(disk[path]).length, mtimeMs: 0, isLink: false }
+    }
+    return { value: names.map(entry) }
   })
   on('fs.read', ($, e) => {
-    const text = disk[at(e.path)]
+    const text = disk[links[at(e.path)] ?? at(e.path)]
     if (text === undefined) throw new Error(`ENOENT: ${e.path}`)
     return { value: text }
   })
@@ -74,6 +83,8 @@ test('a resumed agent starts again, since its model was settled when it first st
 
 const SCRIPT = "export const meta = {name: 'scan', description: 'Scan the repo'}\nawait agent('List the TODO comments')\n"
 const RESEARCH = "export const meta = {name: 'deep-research', description: 'Research'}\nawait agent('Search the web')\n"
+// One byte larger than 512 KiB, the script padded by a line comment of slashes after it.
+const OVERSIZED_RESEARCH = RESEARCH.padEnd(512 * 1024 + 1, '/')
 const WORKFLOW_AGENT = {
   ...SPAWN,
   tool_use_id: 'toolu_workflow',
@@ -204,6 +215,35 @@ test('a script saved as .mjs, .cjs or .ts is not a saved workflow, since Claude 
   engine(on, { files })
   await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'deep-research', args: 'What changed?' })
   expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
+})
+
+test('a script larger than 512 KiB is not a saved workflow, since Claude Code skips one so large', async ($, on) => {
+  engine(on, { files: { '/srv/work/.claude/workflows/deep-research.js': OVERSIZED_RESEARCH } })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'deep-research', args: 'What changed?' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
+})
+
+test('a saved workflow of exactly 512 KiB is found, since Claude Code skips only a larger one', async ($, on) => {
+  engine(on, { files: { '/srv/work/.claude/workflows/todo-scan.js': SCRIPT.padEnd(512 * 1024, '/') } })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
+})
+
+test('a link to a script larger than 512 KiB is not a saved workflow, while a link to a smaller one is', async ($, on) => {
+  // The user's own scripts kept in a dotfiles repository and linked into the personal folder.
+  const files = {
+    '/home/me/dotfiles/workflows/deep-research.js': OVERSIZED_RESEARCH,
+    '/home/me/dotfiles/workflows/todo-scan.js': SCRIPT,
+  }
+  const links = {
+    '/home/me/.claude/workflows/deep-research.js': '/home/me/dotfiles/workflows/deep-research.js',
+    '/home/me/.claude/workflows/todo-scan.js': '/home/me/dotfiles/workflows/todo-scan.js',
+  }
+  engine(on, { files, links })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_research', name: 'deep-research', args: 'What changed?' })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
+  expect(await $.agent.spawn(RESEARCH_AGENT)).toEqual(STARTED)
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
 })
 
 test('a saved workflow whose meta name is in double quotes is found', async ($, on) => {

@@ -83,12 +83,18 @@ async function savedWorkflowFolders($: EngineInterface): Promise<string[]> {
   return folders
 }
 
+/** The size of the largest saved workflow script Claude Code 2.1.322 loads, in bytes: it skips a larger one. */
+const LARGEST_SAVED_SCRIPT_BYTES = 512 * 1024
+
 /** True if a workflow saved on disk, a script Claude could have written, runs by this name. */
 async function isSavedWorkflow($: EngineInterface, name: string): Promise<boolean> {
   for (const folder of await savedWorkflowFolders($)) {
     for (const entry of await $.fs.list(folder).catch(() => [])) {
-      if (!entry.name.endsWith('.js')) continue
-      if (metaName(await $.fs.read(`${folder}/${entry.name}`).catch(() => '')) === name) return true
+      if (!entry.name.endsWith('.js') || entry.size > LARGEST_SAVED_SCRIPT_BYTES) continue
+      const script = await $.fs.read(`${folder}/${entry.name}`).catch(() => '')
+      // A listing describes a link itself, not the script it leads to, so that script is measured as read.
+      if (entry.isLink && new TextEncoder().encode(script).length > LARGEST_SAVED_SCRIPT_BYTES) continue
+      if (metaName(script) === name) return true
     }
   }
   return false
