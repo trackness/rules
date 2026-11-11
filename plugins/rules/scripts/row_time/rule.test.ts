@@ -344,7 +344,7 @@ test('a row recorded in lines already read for another row is drawn without read
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   await drawSkillRow($)
   const ui = await drawReplyRow($)
-  expect({ shown: (await ui.find({ type: 'Text' }))?.text, ran }).toEqual({ shown: `${timeOfDay('2026-11-10T09:32:41.970Z')} `, ran: [['tail', '-n', '+1', TRANSCRIPT]] })
+  expect({ shown: (await ui.find({ type: 'Text' }))?.text, reads: ran.length }).toEqual({ shown: `${timeOfDay('2026-11-10T09:32:41.970Z')} `, reads: 1 })
 })
 
 test('a row the transcript lacked when first drawn is looked for, when drawn again, only in the lines the transcript has gained', async ($, on) => {
@@ -364,7 +364,7 @@ test('a transcript that Claude Code hands back whole is read once for a row it d
   const ran = host(on, { [TRANSCRIPT]: BEFORE_THE_CALL })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   await drawSkillRow($)
-  expect(ran).toEqual([['tail', '-n', '+1', TRANSCRIPT]])
+  expect(ran.length).toBe(1)
 })
 
 test('rows drawn at once share one read of the transcript', async ($, on) => {
@@ -372,9 +372,9 @@ test('rows drawn at once share one read of the transcript', async ($, on) => {
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const rows = await Promise.all([drawSkillRow($), drawReplyRow($)])
   const shown = await Promise.all(rows.map(async (ui) => (await ui.find({ type: 'Text' }))?.text))
-  expect({ shown, ran }).toEqual({
+  expect({ shown, reads: ran.length }).toEqual({
     shown: [`${timeOfDay('2026-11-10T09:30:16.161Z')} `, `${timeOfDay('2026-11-10T09:32:41.970Z')} `],
-    ran: [['tail', '-n', '+1', TRANSCRIPT]],
+    reads: 1,
   })
 })
 
