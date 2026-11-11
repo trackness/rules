@@ -67,11 +67,11 @@ async function timestampIn($: EngineInterface, file: string, linesRead: Map<stri
     const { stdout, isStdoutTruncated } = await $.process.run(['tail', '-n', `+${read + 1}`, file]).catch(() => ({ stdout: '', isStdoutTruncated: false }))
     // What follows the last line break is a line cut short, or nothing.
     const lines = stdout.split('\n').slice(0, -1)
-    if (lines.length === 0) return undefined
     for (const line of lines) noteTimes(line, recorded)
     linesRead.set(file, read + lines.length)
-    if (recorded.has(id)) return recorded.get(id)
-    if (!isStdoutTruncated) return undefined
+    // The reading ends at the row, or where there is no more to read: the stretch was handed back whole, or held no
+    // whole line, being cut inside a first line longer than Claude Code hands back.
+    if (recorded.has(id) || !isStdoutTruncated || lines.length === 0) return recorded.get(id)
   }
 }
 
