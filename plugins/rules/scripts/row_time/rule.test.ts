@@ -365,3 +365,20 @@ test('rows drawn at once share one read of the transcript', async ($, on) => {
     ran: [['tail', '-n', '+1', TRANSCRIPT]],
   })
 })
+
+test('a row drawn at once with a row recorded 4 MiB before it shows its time', async ($, on) => {
+  // A session in which Claude read a 410 KB log twelve times over, 5 MB of transcript, before it called the Skill tool.
+  const log = '2026-11-10T09:00:00.000Z GET /health 200\n'.repeat(10_000)
+  const calls = Array.from({ length: 12 }, (_, n) => read(`toolu_01${String(n).padStart(22, '0')}`, '/srv/work/server.log'))
+  const reads = calls.map((call, n) =>
+    transcript(
+      assistant(`293589d0-56e7-4054-97df-${String(n).padStart(12, '0')}`, '2026-11-10T09:20:07.346Z', { type: 'tool_use', id: call.tool_use_id, name: 'Read', input: call.input }),
+      user(`ef33aa01-5c82-44ac-b682-${String(n).padStart(12, '0')}`, '2026-11-10T09:20:07.568Z', [{ type: 'tool_result', tool_use_id: call.tool_use_id, content: log }]),
+    ),
+  )
+  host(on, { [TRANSCRIPT]: reads.join('') + SKILL_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const firstRead = $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: calls[0].tool_use_id, props: { ...calls[0], isExpanded: false } })
+  const [, ui] = await Promise.all([firstRead, drawSkillRow($)])
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
