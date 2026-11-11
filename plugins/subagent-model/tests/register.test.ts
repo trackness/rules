@@ -81,6 +81,8 @@ const WORKFLOW_AGENT = {
   prompt: 'List the TODO comments',
   workflow: { runId: 'wf_1', agentIndex: 1 },
 }
+// An agent of a second run in the same session, started by the Workflow call toolu_research.
+const RESEARCH_AGENT = { ...WORKFLOW_AGENT, tool_use_id: 'toolu_research', workflow: { runId: 'wf_2', agentIndex: 1 } }
 
 test('an agent spawned without a model by a workflow Claude scripted is denied, with how to fix the script', async ($, on) => {
   engine(on)
@@ -110,8 +112,7 @@ test('each workflow call is judged on its own: a built-in run\'s agent starts wh
   engine(on)
   await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', script: SCRIPT })
   await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_research', name: 'deep-research', args: 'What changed?' })
-  const researchAgent = { ...WORKFLOW_AGENT, tool_use_id: 'toolu_research', workflow: { runId: 'wf_2', agentIndex: 1 } }
-  expect(await $.agent.spawn(researchAgent)).toEqual(STARTED)
+  expect(await $.agent.spawn(RESEARCH_AGENT)).toEqual(STARTED)
   expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
 })
 
@@ -130,6 +131,12 @@ test('an agent spawned without a model by a workflow saved in the user\'s own fo
 
 test('an agent spawned without a model by a workflow saved under CLAUDE_CONFIG_DIR and run by name is denied', async ($, on) => {
   engine(on, { files: { '/config/workflows/scan.js': SCRIPT }, env: { HOME: '/home/me', CLAUDE_CONFIG_DIR: '/config' } })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
+})
+
+test('with CLAUDE_CONFIG_DIR set but empty, the personal folder is workflows in the project root, where Claude Code runs', async ($, on) => {
+  engine(on, { files: { '/srv/work/workflows/scan.js': SCRIPT }, env: { HOME: '/home/me', CLAUDE_CONFIG_DIR: '' } })
   await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
   expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
 })
@@ -206,6 +213,47 @@ test('a saved workflow whose meta name is in double quotes is found', async ($, 
   expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
 })
 
+test('a script with an import before its meta is not a saved workflow, since Claude Code loads one only if meta comes first', async ($, on) => {
+  const script = `import { readFile } from 'node:fs/promises'\n${RESEARCH}`
+  engine(on, { files: { '/srv/work/.claude/workflows/deep-research.js': script } })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'deep-research', args: 'What changed?' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
+})
+
+test('a saved workflow whose meta follows a line comment is found', async ($, on) => {
+  const script = `// Lists the TODO comments for triage.\n\n${SCRIPT}`
+  engine(on, { files: { '/srv/work/.claude/workflows/todo-scan.js': script } })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
+})
+
+test('a script commented out is not a saved workflow, though its comments hold a meta', async ($, on) => {
+  const script = "// export const meta = {name: 'deep-research', description: 'Research'}\n// await agent('Search the web')\n"
+  engine(on, { files: { '/srv/work/.claude/workflows/deep-research.js': script } })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'deep-research', args: 'What changed?' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
+})
+
+test('a saved workflow whose meta follows a block comment is found', async ($, on) => {
+  const script = `/**\n * Lists the TODO comments for triage.\n */\n${SCRIPT}`
+  engine(on, { files: { '/srv/work/.claude/workflows/todo-scan.js': script } })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
+})
+
+test('a script with an import between two doc comments before its meta is not a saved workflow', async ($, on) => {
+  const script = `/** Reads the notes the agents write. */\nimport { readFile } from 'node:fs/promises'\n\n/** The run. */\n${RESEARCH}`
+  engine(on, { files: { '/srv/work/.claude/workflows/deep-research.js': script } })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'deep-research', args: 'What changed?' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
+})
+
+test('a saved workflow that starts with a hashbang line is found', async ($, on) => {
+  engine(on, { files: { '/srv/work/.claude/workflows/todo-scan.js': `#!/usr/bin/env node\n${SCRIPT}` } })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
+})
+
 test('where the session forces every subagent\'s model, agents start without one, since Claude Code ignores the call\'s', async ($, on) => {
   engine(on, { env: { HOME: '/home/me', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: '1' } })
   await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', script: SCRIPT })
@@ -252,6 +300,18 @@ test('a worktree of the session\'s repository stops at its own root', async ($, 
   engine(on, { files, cwd: '/srv/work/.claude/worktrees/fix/pkg' })
   await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'deep-research', args: 'What changed?' })
   expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
+})
+
+test('inside a connector-downloads folder, the scripts saved there are not saved workflows, while the repository\'s still are', async ($, on) => {
+  const files = {
+    '/srv/work/connector-downloads/drive/.claude/workflows/deep-research.js': RESEARCH,
+    '/srv/work/.claude/workflows/todo-scan.js': SCRIPT,
+  }
+  engine(on, { files, cwd: '/srv/work/connector-downloads/drive' })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_research', name: 'deep-research', args: 'What changed?' })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
+  expect(await $.agent.spawn(RESEARCH_AGENT)).toEqual(STARTED)
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
 })
 
 // The other plugin's tool, declared so its name type-checks whichever MCP tools were connected when Claude Code laid the types.

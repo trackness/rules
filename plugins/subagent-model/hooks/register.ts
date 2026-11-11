@@ -15,9 +15,15 @@ function isOn(value: string | undefined): boolean {
   return ['1', 'true', 'yes', 'on'].includes(value?.toLowerCase().trim() ?? '')
 }
 
-/** The name a saved workflow runs by: its meta's name, not its file's. */
+/** The script from its first statement on, past a hashbang line and the whitespace and comments that may come before it. */
+function fromFirstStatement(script: string): string {
+  // With nothing after it to match, the pattern never backtracks into a comment, so each ends where JavaScript ends it.
+  return script.replace(/^(?:#!.*)?(?:\s|\/\/.*|\/\*[\s\S]*?\*\/)*/, '')
+}
+
+/** The name a saved workflow runs by: its meta's name, not its file's, if meta comes first, as Claude Code requires to load it. */
 function metaName(script: string): string | undefined {
-  return /export\s+const\s+meta\s*=\s*\{[\s\S]*?\bname['"]?\s*:\s*(['"`])(.*?)\1/.exec(script)?.[2]
+  return /^export\s+const\s+meta\s*=\s*\{[\s\S]*?\bname['"]?\s*:\s*(['"`])(.*?)\1/.exec(fromFirstStatement(script))?.[2]
 }
 
 /** The path with / for every separator, so a Windows path walks as a POSIX one does. */
@@ -49,8 +55,9 @@ async function isWorktreeOf($: EngineInterface, root: string, outer: string): Pr
  * The folders Claude Code 2.1.322 loads saved workflows from, as its binary walks them: .claude/workflows in the working
  * directory and in each one above it, stopping before the home folder and after the repository root, or at the file
  * system root outside a repository and the home folder. A repository nested in the session's own, unless it is a
- * worktree of it, walks on to the session repository's root. Then the personal folder: workflows in CLAUDE_CONFIG_DIR,
- * which is .claude in the home folder unless set.
+ * worktree of it, walks on to the session repository's root. The walk passes over, without stopping, every directory
+ * whose path goes through a folder named connector-downloads. Then the personal folder: workflows in CLAUDE_CONFIG_DIR,
+ * which is .claude in the home folder unless set, and the project root if set but empty.
  */
 async function savedWorkflowFolders($: EngineInterface): Promise<string[]> {
   // The home folder as os.homedir() takes it: USERPROFILE on Windows, HOME elsewhere, even where USERPROFILE is set (WSL).
@@ -58,17 +65,20 @@ async function savedWorkflowFolders($: EngineInterface): Promise<string[]> {
   const homeVar = isWindows ? await $.env.get('USERPROFILE') : await $.env.get('HOME')
   const home = homeVar === undefined ? undefined : slashed(homeVar)
   const cwd = slashed(await $.session.cwd())
-  const sessionRepo = await repoRoot($, slashed(await $.session.root()))
+  const projectRoot = slashed(await $.session.root())
+  const sessionRepo = await repoRoot($, projectRoot)
   let repo = await repoRoot($, cwd)
   if (repo !== undefined && sessionRepo !== undefined && repo.startsWith(`${sessionRepo}/`) && !(await isWorktreeOf($, repo, sessionRepo))) {
     repo = sessionRepo
   }
   const folders: string[] = []
   for (let dir = cwd; dir !== home; dir = parentOf(dir)) {
-    folders.push(`${dir.replace(/\/$/, '')}/.claude/workflows`)
+    if (!dir.split('/').includes('connector-downloads')) folders.push(`${dir.replace(/\/$/, '')}/.claude/workflows`)
     if (dir === repo || parentOf(dir) === dir) break
   }
-  const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) ?? (home === undefined ? undefined : `${home}/.claude`)
+  // Claude Code takes an empty CLAUDE_CONFIG_DIR as a relative path, read in the directory it runs in: the project root.
+  const configVar = await $.env.get('CLAUDE_CONFIG_DIR')
+  const configDir = configVar === '' ? projectRoot : (configVar ?? (home === undefined ? undefined : `${home}/.claude`))
   if (configDir !== undefined) folders.push(`${slashed(configDir)}/workflows`)
   return folders
 }
