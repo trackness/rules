@@ -93,6 +93,23 @@ async function lookFor($: EngineInterface, transcript: string, reading: Reading,
   }
 }
 
+/** The times kept for a session's rows. */
+type Kept = {
+  /** The times of the rows drawn so far, as the transcript records them, by the id of their row: what the times file holds. */
+  times: Map<string, string>
+  /** The last write of the times file, which the next one follows. */
+  written: Promise<void>
+}
+
+/** Keeps a row's time, in the times file too. */
+async function keep($: EngineInterface, transcript: string, kept: Kept, id: string, timestamp: string): Promise<void> {
+  kept.times.set(id, timestamp)
+  const write = () => $.fs.write(timesFile(transcript), timesText(kept.times))
+  // The file is written whole, and Claude Code carries out the writes under way at once in no set order: each write
+  // follows the last, made or refused, so the one that lands last holds every time.
+  await (kept.written = kept.written.then(write, write))
+}
+
 /** The read now under way of a session's transcripts, or else one started to look for a row. */
 function readUnderWay($: EngineInterface, transcript: string, reading: Reading, id: string): Promise<void> {
   return (reading.underWay ??= lookFor($, transcript, reading, id).finally(() => delete reading.underWay))
@@ -103,32 +120,26 @@ function readUnderWay($: EngineInterface, transcript: string, reading: Reading, 
  * which is then kept, in the times file too. A row no read has yet timed waits for the read under way, or starts one.
  * Undefined until the transcript holds the row.
  */
-async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, written: { last: Promise<void> }, reading: Reading, id: string): Promise<string | undefined> {
-  if (kept.has(id)) return kept.get(id)
+async function recordedTimestamp($: EngineInterface, transcript: string, kept: Kept, reading: Reading, id: string): Promise<string | undefined> {
+  if (kept.times.has(id)) return kept.times.get(id)
   const isAnotherRowsRead = reading.underWay !== undefined
   if (!reading.recorded.has(id)) await readUnderWay($, transcript, reading, id)
   // Another row's read ends at the transcript that records that row, and is cut short if Claude Code drops that
   // row's drawing: a row it leaves untimed reads on itself.
   if (isAnotherRowsRead && !reading.recorded.has(id)) await readUnderWay($, transcript, reading, id)
   const timestamp = reading.recorded.get(id)
-  if (timestamp) {
-    kept.set(id, timestamp)
-    const write = () => $.fs.write(timesFile(transcript), timesText(kept))
-    await (written.last = written.last.then(write, write))
-  }
+  if (timestamp) await keep($, transcript, kept, id, timestamp)
   return timestamp
 }
 
 export const register: Register = (on) => {
   // The session's transcript file: empty until the session starts, and for a session that keeps none.
   let transcript = ''
-  // The times read so far, as the transcript records them, by the id of their row: what the times file holds.
-  let kept = new Map<string, string>()
-  const written = { last: Promise.resolve() }
+  const kept: Kept = { times: new Map(), written: Promise.resolve() }
   const reading: Reading = { linesRead: new Map(), recorded: new Map() }
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
-    kept = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
+    kept.times = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
     return next(e)
   })
   on('session.append', async ($, e, next) => {
@@ -148,7 +159,7 @@ export const register: Register = (on) => {
     if (e.component === 'ToolResult') return h(Box, { flexDirection: 'row' }, h(Text, null, NO_TIME), await next(e)) as RenderElement
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
-    const timestamp = await recordedTimestamp($, transcript, kept, written, reading, id)
+    const timestamp = await recordedTimestamp($, transcript, kept, reading, id)
     const time = h(Text, { dimColor: true }, `${timestamp ? timeOfDay(timestamp) : NOT_YET} `)
     // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside
     // the ⏺. Above a subagent's prompt from main it draws its "From main" label in place of the blank line.
