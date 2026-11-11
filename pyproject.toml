@@ -10,7 +10,7 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["plugins/rules"]
-# Every rule's tests are test_rule.py beside its rule.py, and importlib mode imports each under a name built from its
-# path, so the same file names don't collide and each test can import its own rule as .rule.
+testpaths = ["plugins/rules", "plugins/agent-row"]
+# Each script's tests sit beside it, as test_rule.py beside rule.py, and importlib mode imports each under a name built
+# from its path, so the same file names don't collide and each test can import its own script relatively, as .rule.
 addopts = ["--import-mode=importlib"]
