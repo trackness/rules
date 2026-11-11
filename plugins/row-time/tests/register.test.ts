@@ -118,6 +118,14 @@ test('a tool-call row shows the time the transcript records for its call', async
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
 
+test('a row shows the time of day where the session runs in summer too, when a zone with summer time stands apart from UTC', async ($, on) => {
+  const call = { type: 'tool_use', id: SKILL_CALL.tool_use_id, name: 'Skill', input: SKILL_CALL.input }
+  host(on, { [TRANSCRIPT]: transcript(assistant('a2dc512c-f195-45f6-9351-8da543c2d09b', '2026-07-10T09:30:16.161Z', call)) })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-07-10T09:30:16.161Z')} `)
+})
+
 test('a row takes its time from the first line that both times it and names it', async ($, on) => {
   const call = { type: 'tool_use', id: SKILL_CALL.tool_use_id, name: 'Skill', input: SKILL_CALL.input }
   const session = transcript(
