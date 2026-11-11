@@ -1,6 +1,6 @@
 # rules
 
-A Claude Code plugin of hooks that enforce rules on how Claude uses its tools. Each rule is a folder in `scripts/`, holding the rule, its tests and its README, and is registered in `hooks/hooks.json`; the explicit subagent model rule is a TypeScript module that `hooks/hooks.json` names under `modules`.
+A Claude Code plugin of hooks that enforce rules on how Claude uses its tools. Each rule is a folder in `scripts/`, holding the rule, its tests and its README, and is registered in `hooks/hooks.json`; the explicit subagent model rule is a TypeScript module that `hooks/hooks.json` names under `modules`, and the row times mod is a TypeScript module imported into it.
 
 ## Rules
 
@@ -13,6 +13,7 @@ A Claude Code plugin of hooks that enforce rules on how Claude uses its tools. E
 | [Conventional Commits messages](scripts/commit_message/README.md) | `SessionStart`, then git's `commit-msg` |
 | [Work only on a branch](scripts/work_branch/README.md) | `PreToolUse` on `Edit`, `Write` and `NotebookEdit`, plus git's `pre-commit` from `SessionStart` |
 | [Explicit subagent model](scripts/subagent_model/README.md) | `agent.spawn`, and `tool.call` on `Workflow`: mod hooks |
+| [Row times](scripts/row_time/README.md) | `ui.render`, `session.append` and `classic.SessionStart`: mod hooks |
 
 When a hook blocks a call, Claude Code cancels it and shows Claude the hook's message. When a git hook rejects a commit or a push, git stops it, and its message is in the output of Claude's Bash command.
 
