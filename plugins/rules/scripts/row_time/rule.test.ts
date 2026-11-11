@@ -252,3 +252,15 @@ test('a row whose read of the transcript is cut short shows --:--', async ($, on
   const ui = await drawSkillRow($)
   expect((await ui.find({ type: 'Text' }))?.text).toBe('--:-- ')
 })
+
+test('what Claude Code draws outside the transcript is left as it draws it: the spinner, the band above the prompt and the lines under it', async ($, on) => {
+  host(on, { [TRANSCRIPT]: SKILL_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const spinner = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'Spinner', props: { word: 'Undulating', message: null, suffix: '…', mode: 'thinking' } })
+  const bandProps = { hasSurvey: false, isCollapsed: false, isWorking: true, maxRows: 17, bodyColumns: 155, scroll: { offset: 0, bodyRows: 16 }, view: {} }
+  const band = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AbovePrompt', requestId: 'above-prompt', props: bandProps })
+  const hint = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'PromptHint', requestId: 'prompt-hint', props: { isDraft: false, isWorking: true, hint: '(shift+tab to cycle)' } })
+  const mode = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'SessionMode', requestId: 'session-mode', props: { modes: [] } })
+  const drawn = [await spinner.drawn(), await band.drawn(), await hint.drawn(), await mode.drawn()]
+  expect(drawn.map((tree) => tree.type)).toEqual(['engine', 'engine', 'engine', 'engine'])
+})
