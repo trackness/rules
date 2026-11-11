@@ -25,10 +25,16 @@ function timeOfDay(timestamp: string): string {
   return `${String(at.getHours()).padStart(2, '0')}:${String(at.getMinutes()).padStart(2, '0')}`
 }
 
+// The timer of the tests' own runtime, which the types Claude Code lays down for a plugin do not declare.
+declare function setTimeout(callback: () => void, milliseconds: number): unknown
+
+// How much of what a command writes Claude Code 2.1.322 hands a plugin: the first 4 MiB, the rest dropped.
+const STDOUT_LIMIT = 4 * 1024 * 1024
+
 // The host beneath the plugin: a session that starts, and its files. A plugin's own file read refuses a file over
-// 4 MiB, which a transcript passes, so the files are read from a line on by tail. A write replaces a file whole.
+// 4 MiB, which a transcript passes, so the files are read from a byte on by tail. A write replaces a file whole.
 // Answers with the commands the plugin ran.
-function host(on: On, files: Record<string, string>) {
+function host(on: On, files: Record<string, string>, commandsAborted = 0) {
   const ran: (readonly string[])[] = []
   on('classic.SessionStart', () => ({}))
   on('fs.read', ($, e) => {
@@ -36,8 +42,14 @@ function host(on: On, files: Record<string, string>) {
     if (text === undefined) throw new Error(`ENOENT: no such file or directory, open '${e.path}'`)
     return { value: text }
   })
-  on('fs.write', ($, e) => {
-    files[e.path] = e.text
+  // Claude Code carries out the writes a plugin has under way at once in no set order: here, the latest first.
+  const writesUnderWay: (() => void)[] = []
+  on('fs.write', async ($, e) => {
+    writesUnderWay.push(() => {
+      files[e.path] = e.text
+    })
+    await new Promise((resolve) => setTimeout(() => resolve(undefined), 0))
+    writesUnderWay.pop()?.()
     return { value: undefined }
   })
   on('fs.list', ($, e) => {
@@ -47,13 +59,16 @@ function host(on: On, files: Record<string, string>) {
   })
   on('process.run', ($, e) => {
     ran.push(e.argv)
+    // Claude Code aborts the command under way for a drawing it drops: here, the first commands the plugin runs.
+    if (ran.length <= commandsAborted) throw new Error(`rules: $.process.run(${String(e.argv[0])}) aborted`)
     const [command, flag, from, path] = e.argv
     const text = path === undefined ? undefined : files[path]
-    if (command !== 'tail' || flag !== '-n' || text === undefined) {
+    if (command !== 'tail' || flag !== '-c' || text === undefined) {
       return { value: { exitCode: 1, stdout: '', stderr: `${String(command)}: ${String(path)}: No such file or directory\n`, isStdoutTruncated: false, isStderrTruncated: false } }
     }
-    const stdout = text.split('\n').slice(Number(from) - 1).join('\n')
-    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    // The transcripts here are ASCII, a byte to a character.
+    const stdout = text.slice(Number(from) - 1)
+    return { value: { exitCode: 0, stdout: stdout.slice(0, STDOUT_LIMIT), stderr: '', isStdoutTruncated: stdout.length > STDOUT_LIMIT, isStderrTruncated: false } }
   })
   return ran
 }
@@ -164,13 +179,9 @@ test('a row shows --:-- until the transcript has its time', async ($, on) => {
   expect((await ui.find({ type: 'Text' }))?.text).toBe('--:-- ')
 })
 
-test('once the transcript has the time, the row is redrawn in place with it', async ($, on) => {
-  const clock = mock.clock(on)
-  const files = { [TRANSCRIPT]: BEFORE_THE_CALL }
-  host(on, files)
-  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  const ui = await drawSkillRow($)
-  // Claude Code adds the call to the conversation, and writes it to the transcript a moment later.
+// Claude Code adds the Skill call to the conversation, and a moment later writes it to the transcript, as its next
+// line. The rows are drawn again by then.
+async function recordSkillCall($: Engine, clock: ReturnType<typeof mock.clock>, files: Record<string, string>) {
   const call = { type: 'tool_use', id: SKILL_CALL.tool_use_id, name: 'Skill', input: SKILL_CALL.input } as const
   await $.session.append({
     message: { type: 'assistant', role: 'assistant', content: [call] },
@@ -180,6 +191,15 @@ test('once the transcript has the time, the row is redrawn in place with it', as
   })
   files[TRANSCRIPT] += transcript(assistant('a2dc512c-f195-45f6-9351-8da543c2d09b', '2026-11-10T09:30:16.161Z', call))
   await clock.advance(1000)
+}
+
+test('once the transcript has the time, the row is redrawn in place with it', async ($, on) => {
+  const clock = mock.clock(on)
+  const files = { [TRANSCRIPT]: BEFORE_THE_CALL }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  await recordSkillCall($, clock, files)
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
 
@@ -301,4 +321,127 @@ test('a slash command\'s output, which Claude Code draws under the command\'s ow
   const output = { command: 'tasks', args: '', text: 'Viewing agent', isErrored: false }
   const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'CommandOutput', requestId: 'b19f5b34-dba6-4810-9b4a-df2a3c88fa09', props: output })
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
+
+// One of a run of reads of one 410 KB log, as its row carries the call.
+function logRead(n: number) {
+  return read(`toolu_01${String(n).padStart(22, '0')}`, '/srv/work/server.log')
+}
+
+const LOG_READS = Array.from({ length: 12 }, (_, n) => logRead(n))
+const LOG = '2026-11-10T09:00:00.000Z GET /health 200\n'.repeat(10_000)
+
+// A session in which Claude made twelve of those reads, 5 MB of transcript, before it called the Skill tool.
+const LONG_SESSION =
+  LOG_READS.map((call, n) =>
+    transcript(
+      assistant(`293589d0-56e7-4054-97df-${String(n).padStart(12, '0')}`, '2026-11-10T09:20:07.346Z', { type: 'tool_use', id: call.tool_use_id, name: 'Read', input: call.input }),
+      user(`ef33aa01-5c82-44ac-b682-${String(n).padStart(12, '0')}`, '2026-11-10T09:20:07.568Z', [{ type: 'tool_result', tool_use_id: call.tool_use_id, content: LOG }]),
+    ),
+  ).join('') + SKILL_SESSION
+
+test('a row the transcript records past its first 4 MiB shows its time', async ($, on) => {
+  host(on, { [TRANSCRIPT]: LONG_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
+test('a row recorded in lines already read for another row is drawn without reading the transcript again', async ($, on) => {
+  const ran = host(on, { [TRANSCRIPT]: REPLY_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  await drawSkillRow($)
+  const ui = await drawReplyRow($)
+  expect({ shown: (await ui.find({ type: 'Text' }))?.text, reads: ran.length }).toEqual({ shown: `${timeOfDay('2026-11-10T09:32:41.970Z')} `, reads: 1 })
+})
+
+test('a row the transcript lacked when first drawn is looked for, when drawn again, from the byte where the last read ended', async ($, on) => {
+  const clock = mock.clock(on)
+  const files = { [TRANSCRIPT]: BEFORE_THE_CALL }
+  const ran = host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  const ranForFirstDraw = ran.length
+  await recordSkillCall($, clock, files)
+  const shown = (await ui.find({ type: 'Text' }))?.text
+  // A read that starts at a byte goes straight to it: one that starts at a line counts through every line before.
+  const fromTheCall = ['tail', '-c', `+${BEFORE_THE_CALL.length + 1}`, TRANSCRIPT]
+  expect({ shown, ran: ran.slice(ranForFirstDraw) }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [fromTheCall] })
+})
+
+test('a transcript that Claude Code hands back whole is read once for a row it does not yet hold', async ($, on) => {
+  const ran = host(on, { [TRANSCRIPT]: BEFORE_THE_CALL })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  await drawSkillRow($)
+  expect(ran.length).toBe(1)
+})
+
+test('rows drawn at once share one read of the transcript', async ($, on) => {
+  const ran = host(on, { [TRANSCRIPT]: REPLY_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const rows = await Promise.all([drawSkillRow($), drawReplyRow($)])
+  const shown = await Promise.all(rows.map(async (ui) => (await ui.find({ type: 'Text' }))?.text))
+  expect({ shown, reads: ran.length }).toEqual({
+    shown: [`${timeOfDay('2026-11-10T09:30:16.161Z')} `, `${timeOfDay('2026-11-10T09:32:41.970Z')} `],
+    reads: 1,
+  })
+})
+
+test('a row drawn at once with a row recorded 4 MiB before it shows its time', async ($, on) => {
+  host(on, { [TRANSCRIPT]: LONG_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  // The first read's row, recorded at the top of the transcript.
+  const firstRead = $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: logRead(0).tool_use_id, props: { ...logRead(0), isExpanded: false } })
+  const [, ui] = await Promise.all([firstRead, drawSkillRow($)])
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
+test('a row that waited on another row\'s read, which Claude Code cut short, reads the transcript itself', async ($, on) => {
+  // Claude Code drops the Skill row's drawing, and aborts the read under way for it: the first of the session.
+  host(on, { [TRANSCRIPT]: REPLY_SESSION }, 1)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const [, ui] = await Promise.all([drawSkillRow($), drawReplyRow($)])
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:32:41.970Z')} `)
+})
+
+test('a row drawn before the session starts, as a resumed session\'s rows are, is redrawn with its time once it has started', async ($, on) => {
+  host(on, { [TRANSCRIPT]: SKILL_SESSION, [TIMES]: `${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n` })
+  const ui = await drawSkillRow($)
+  await $.classic.SessionStart({ source: 'resume', transcript_path: TRANSCRIPT })
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
+test('a status line under the logo, which the transcript does not record, is left as Claude Code draws it', async ($, on) => {
+  host(on, { [TRANSCRIPT]: SKILL_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const notice = { text: 'Debug mode enabled · logging to /home/me/debug.log', command: null }
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'InfoNotice', requestId: `notice:${notice.text}`, props: notice })
+  expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
+
+test('the reply Claude Code itself adds to a forked session, which it draws nothing for, shows no time', async ($, on) => {
+  const added = assistant('2bb86f3e-d64b-41c1-903e-3d13a2707994', '2026-11-10T09:40:20.460Z', { type: 'text', text: 'No response requested.' })
+  host(on, { [TRANSCRIPT]: SKILL_SESSION + transcript(added) })
+  await $.classic.SessionStart({ source: 'resume', transcript_path: TRANSCRIPT })
+  const props = { text: 'No response requested.', isFirstOfReply: true }
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AssistantMessage', requestId: '2bb86f3e-d64b-41c1-903e-3d13a2707994', props })
+  expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
+
+test('a row recorded after a transcript line longer than 4 MiB shows its time', async ($, on) => {
+  // A session in which Claude read a 5 MB log, whose result is one line of the transcript, before it called the Skill tool.
+  const call = read('toolu_01Hq7RkZsYw3uXc9LmNpT2bV', '/srv/work/archive.log')
+  const longLine = transcript(user('5c0e7d1a-3f2b-4a8e-9d6c-1b7f4e2a9c03', '2026-11-10T09:20:07.568Z', [{ type: 'tool_result', tool_use_id: call.tool_use_id, content: LOG.repeat(13) }]))
+  host(on, { [TRANSCRIPT]: longLine + SKILL_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
+test('the file keeps the time of every row drawn at once', async ($, on) => {
+  const files: Record<string, string> = { [TRANSCRIPT]: REPLY_SESSION }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  await Promise.all([drawSkillRow($), drawReplyRow($)])
+  expect(files[TIMES]).toBe(`${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:32:41.970Z\n`)
 })
