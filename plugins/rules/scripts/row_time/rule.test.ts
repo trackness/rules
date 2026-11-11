@@ -347,3 +347,10 @@ test('a row the transcript lacked when first drawn is looked for, when drawn aga
   const shown = (await ui.find({ type: 'Text' }))?.text
   expect({ shown, ran: ran.slice(ranForFirstDraw) }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [['tail', '-n', '+3', TRANSCRIPT]] })
 })
+
+test('a transcript that Claude Code hands back whole is read once for a row it does not yet hold', async ($, on) => {
+  const ran = host(on, { [TRANSCRIPT]: BEFORE_THE_CALL })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  await drawSkillRow($)
+  expect(ran).toEqual([['tail', '-n', '+1', TRANSCRIPT]])
+})
