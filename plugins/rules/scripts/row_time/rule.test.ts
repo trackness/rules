@@ -40,6 +40,11 @@ function host(on: On, files: Record<string, string>) {
     files[e.path] = e.text
     return { value: undefined }
   })
+  on('fs.list', ($, e) => {
+    const names = Object.keys(files).filter((path) => path.startsWith(`${e.path}/`)).map((path) => path.slice(e.path.length + 1))
+    if (names.length === 0) throw new Error(`ENOENT: no such file or directory, scandir '${e.path}'`)
+    return { value: names.filter((name) => !name.includes('/')).map((name) => ({ name, kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false })) }
+  })
   on('process.run', ($, e) => {
     ran.push(e.argv)
     const [command, flag, from, path] = e.argv
@@ -211,4 +216,21 @@ test('a row whose time is already in the file is drawn from it, without reading 
   await $.classic.SessionStart({ source: 'resume', transcript_path: TRANSCRIPT })
   const ui = await drawSkillRow($)
   expect({ shown: (await ui.find({ type: 'Text' }))?.text, ran }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [] })
+})
+
+test('a row of a subagent shows the time the subagent\'s own transcript records for it', async ($, on) => {
+  // Claude Code keeps each subagent's transcript in the session's own folder, beside the session's transcript.
+  const subagent = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a/subagents/agent-aa3ba150d12cc0104.jsonl'
+  const listing = { tool_use_id: 'toolu_01CzxxKQm4nTq8sVbY2LwPd7', tool: 'Bash', input: { command: 'ls' }, isRunning: false, isErrored: false, isInterrupted: false, isExpanded: false }
+  const files = {
+    [TRANSCRIPT]: SKILL_SESSION,
+    [subagent]: transcript(
+      user('e7de5353-1dba-418e-b700-e4328fbfd528', '2026-11-10T10:01:40.987Z', 'List the files'),
+      assistant('56d6a0c1-6a0e-4c0e-9d53-0d7f1c9a2b11', '2026-11-10T10:02:05.310Z', { type: 'tool_use', id: listing.tool_use_id, name: 'Bash', input: listing.input }),
+    ),
+  }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: listing.tool_use_id, props: listing })
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T10:02:05.310Z')} `)
 })
