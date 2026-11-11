@@ -118,6 +118,21 @@ test('a tool-call row shows the time the transcript records for its call', async
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
 
+test('a row takes its time from the first line that both times it and names it', async ($, on) => {
+  const call = { type: 'tool_use', id: SKILL_CALL.tool_use_id, name: 'Skill', input: SKILL_CALL.input }
+  const session = transcript(
+    // A line with no time that repeats the call's id, as the copy Claude Code keeps of a request does.
+    { isSidechain: false, message: { role: 'assistant', content: [call] } },
+    assistant('a2dc512c-f195-45f6-9351-8da543c2d09b', '2026-11-10T09:30:16.161Z', call),
+    // A later line that names the call again, with a time of its own.
+    assistant('b3ed0f11-7c2a-4e5d-9f61-0a8b2c4d6e13', '2026-11-10T09:45:00.000Z', call),
+  )
+  host(on, { [TRANSCRIPT]: session })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
 test('the time takes no columns from the row Claude Code draws: the row stands alone in a column, and the time is drawn after it, over it', async ($, on) => {
   const ui = await skillRow($, on)
   expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'column' }, children: [{ type: 'engine' }, { type: 'Box', props: { position: 'absolute' } }] })
