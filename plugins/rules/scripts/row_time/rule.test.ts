@@ -321,3 +321,11 @@ test('a row the transcript records past its first 4 MiB shows its time', async (
   const ui = await drawSkillRow($)
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
+
+test('a row recorded in lines already read for another row is drawn without reading the transcript again', async ($, on) => {
+  const ran = host(on, { [TRANSCRIPT]: REPLY_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  await drawSkillRow($)
+  const ui = await drawReplyRow($)
+  expect({ shown: (await ui.find({ type: 'Text' }))?.text, ran }).toEqual({ shown: `${timeOfDay('2026-11-10T09:32:41.970Z')} `, ran: [['tail', '-n', '+1', TRANSCRIPT]] })
+})
