@@ -101,6 +101,7 @@ export const register: Register = (on) => {
     const timestamp = await recordedTimestamp($, transcript, kept, id)
     const time = h(Text, { dimColor: true }, `${timestamp ? timeOfDay(timestamp) : NOT_YET} `)
     // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside the ⏺.
-    return h(Box, { flexDirection: 'row' }, h(Box, { marginTop: 1 }, time), await next(e)) as RenderElement
+    const isFromMain = e.component === 'UserMessage' && e.props.origin.kind === 'coordinator'
+    return h(Box, { flexDirection: 'row' }, h(Box, { marginTop: isFromMain ? 0 : 1 }, time), await next(e)) as RenderElement
   })
 }
