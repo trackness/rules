@@ -23,6 +23,7 @@ function timesFile(transcript: string): string {
 
 /** The timestamp the transcript records for a row, kept in the times file once read; undefined until the transcript holds the row. */
 async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, id: string): Promise<string | undefined> {
+  if (kept.has(id)) return kept.get(id)
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
   const { stdout } = await $.process.run(['tail', '-n', '+1', transcript])
   const record = stdout.split('\n').find((line) => recordsRow(line, id))
@@ -38,9 +39,11 @@ export const register: Register = (on) => {
   // The session's transcript file: empty until the session starts, and for a session that keeps none.
   let transcript = ''
   // The times read so far, as the transcript records them, by the id of their row: what the times file holds.
-  const kept = new Map<string, string>()
-  on('classic.SessionStart', ($, e, next) => {
+  let kept = new Map<string, string>()
+  on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
+    const lines = (await $.fs.read(timesFile(transcript)).catch(() => '')).split('\n').filter(Boolean)
+    kept = new Map(lines.map((line) => line.split(' ') as [string, string]))
     return next(e)
   })
   on('session.append', async ($, e, next) => {
