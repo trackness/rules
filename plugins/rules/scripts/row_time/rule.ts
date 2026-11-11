@@ -26,14 +26,21 @@ function timeOfDay(timestamp: string): string {
 /** Where a line of the transcript names a row it records: a tool call by the id of the block the line holds, a reply by the line's own id. */
 const ROW_ID = /"(?:id|uuid)":"([^"]*)"/g
 
+/**
+ * The time a line of the transcript records. Undefined for a line that records none, and for the end of a line too
+ * long to be read whole, which is no record.
+ */
+function timestampOf(line: string): string | undefined {
+  try {
+    return JSON.parse(line).timestamp
+  } catch {
+    return undefined
+  }
+}
+
 /** Notes the time a line of the transcript records, under each row the line names that no earlier line has timed. */
 function noteTimes(line: string, recorded: Map<string, string>): void {
-  let timestamp
-  try {
-    timestamp = JSON.parse(line).timestamp
-  } catch {
-    return
-  }
+  const timestamp = timestampOf(line)
   // Some lines carry no time, such as the copy Claude Code keeps of a request, which repeats the ids of its tool calls.
   if (!timestamp) return
   for (const [, id = ''] of line.matchAll(ROW_ID)) if (!recorded.has(id)) recorded.set(id, timestamp)
@@ -90,8 +97,10 @@ async function readOn($: EngineInterface, file: string, { bytesRead, recorded }:
     // What follows the last line break is a line cut short, or nothing.
     const wholeLines = stdout.slice(0, stdout.lastIndexOf('\n') + 1)
     for (const line of wholeLines.split('\n').slice(0, -1)) noteTimes(line, recorded)
-    const passed = isStdoutTruncated && wholeLines === '' ? stdout : wholeLines
-    bytesRead.set(file, read + new TextEncoder().encode(passed).length)
+    // A stretch cut before any line break is part of one line longer than Claude Code hands back. It is passed over
+    // whole, and the end of that line, which opens a later stretch, records nothing.
+    const passedOver = isStdoutTruncated && wholeLines === '' ? stdout : wholeLines
+    bytesRead.set(file, read + new TextEncoder().encode(passedOver).length)
     if (!isStdoutTruncated) return
   }
 }
