@@ -428,6 +428,16 @@ test('the reply Claude Code itself adds to a forked session, which it draws noth
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })
 
+test('a row recorded after a transcript line longer than 4 MiB shows its time', async ($, on) => {
+  // A session in which Claude read a 5 MB log, whose result is one line of the transcript, before it called the Skill tool.
+  const call = read('toolu_01Hq7RkZsYw3uXc9LmNpT2bV', '/srv/work/archive.log')
+  const longLine = transcript(user('5c0e7d1a-3f2b-4a8e-9d6c-1b7f4e2a9c03', '2026-11-10T09:20:07.568Z', [{ type: 'tool_result', tool_use_id: call.tool_use_id, content: LOG.repeat(13) }]))
+  host(on, { [TRANSCRIPT]: longLine + SKILL_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
+})
+
 test('the file keeps the time of every row drawn at once', async ($, on) => {
   const files: Record<string, string> = { [TRANSCRIPT]: REPLY_SESSION }
   host(on, files)
