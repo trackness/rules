@@ -157,6 +157,7 @@ export const register: Register = (on) => {
   let transcript = ''
   const kept: Kept = { times: new Map(), written: Promise.resolve() }
   const reading: Reading = { bytesRead: new Map(), recorded: new Map() }
+  // No .catch: Claude Code skips a hook that fails, and the session goes on as it would without the mod.
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
     kept.times = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
