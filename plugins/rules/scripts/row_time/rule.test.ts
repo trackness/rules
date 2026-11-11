@@ -284,3 +284,13 @@ test('a tool call\'s result stays under its call, moved right by the width of a 
   const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolResult', requestId: SKILL_CALL.tool_use_id, props: result })
   expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'row' }, children: [{ type: 'Text', children: ['      '] }, { type: 'engine' }] })
 })
+
+test('the prompt a subagent has from main, which Claude Code draws under a label and not a blank line, has its time on its first line', async ($, on) => {
+  const subagent = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a/subagents/agent-ae990d03dc2e2a409.jsonl'
+  const prompt = user('8192dc5a-249e-49bc-b50e-74caa4f7c02d', '2026-11-10T10:01:40.987Z', 'Run the Bash command `echo hi` and then reply done.')
+  host(on, { [TRANSCRIPT]: SKILL_SESSION, [subagent]: transcript(prompt) })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const props = { text: 'Run the Bash command `echo hi` and then reply done.', origin: { kind: 'coordinator' }, isExpanded: false } as const
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'UserMessage', requestId: '8192dc5a-249e-49bc-b50e-74caa4f7c02d', props })
+  expect(await ui.drawn()).toMatchObject({ children: [{ type: 'Box', props: { marginTop: 0 } }, {}] })
+})
