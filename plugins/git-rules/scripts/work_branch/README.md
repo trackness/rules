@@ -2,10 +2,11 @@
 
 Keeps Claude's work on a branch with two checks: one on each Edit, Write and NotebookEdit call, which blocks a change to a file whose repository is not on a work branch before the change is made, and one in git's `pre-commit` hook, which rejects a commit made there.
 
-A repository is on a work branch when the branch checked out has any name but main, master or develop. A detached HEAD is on no branch, so it is not on a work branch either. Two states are let through:
+A repository is on a work branch when the branch checked out has any name but main, master or develop. A detached HEAD is on no branch, so it is not on a work branch either. Three states are let through:
 
 - a repository with no commits yet, which has no main to branch from, so its first commit is made on main
 - a rebase in progress, with or without `--apply`, during which git detaches HEAD, so that a conflict can still be resolved and the rebase continued
+- a merge, cherry-pick or revert stopped at a conflict on main, master or develop, during which `git switch -c` refuses to run, so that the conflict can still be resolved and the commit that finishes it made
 
 ## File changes
 
@@ -20,7 +21,8 @@ Allowed:
 - a file in a repository on a work branch
 - a file outside any repository, such as a scratch file or Claude's memory
 - a file git ignores, such as `.claude/settings.local.json`, which is on no branch
-- a file in a repository with no commits, or in the middle of a rebase
+- a file in the git directory, such as `.git/config` or `.git/info/exclude`, which is on no branch either
+- a file in a repository with no commits, in the middle of a rebase, or with a merge, cherry-pick or revert stopped at a conflict
 
 ## Commits
 
@@ -37,6 +39,6 @@ This check is what stops the work a Bash command does. Nothing in a command's te
 - files a Bash command changes, until `git commit` is asked to commit them, and never if they are never committed
 - files changed by any other tool, such as one an MCP server provides
 - `git commit --no-verify`, which skips the `pre-commit` hook
-- commits that other git commands make on main, master or develop, such as `git cherry-pick`, `git revert` and `git merge`, whether it fast-forwards or makes a merge commit: none runs a `pre-commit` hook, and a fast-forward is how `git pull` brings main up to date
+- commits that other git commands make on main, master or develop, such as `git cherry-pick`, `git revert` and `git merge`, whether it fast-forwards or makes a merge commit: none runs a `pre-commit` hook unless they stop at a conflict, and then the hook lets through the commit that finishes them; a fast-forward is how `git pull` brings main up to date
 - a repository whose shared branch has another name, such as trunk: only main, master and develop are kept free of work
 - what none of the plugin's [git hooks](../../README.md#git-hooks) checks, such as a commit run with `-c hook.work-branch.enabled=false`, a git older than 2.54.0 or git run by a PowerShell command
