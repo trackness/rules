@@ -48,7 +48,7 @@ async function transcriptsOf($: EngineInterface, transcript: string): Promise<st
 }
 
 /** The timestamp a transcript file records for a row, or undefined where it holds no record of the row. */
-async function timestampIn($: EngineInterface, file: string, id: string): Promise<string | undefined> {
+async function timestampIn($: EngineInterface, file: string, recorded: Map<string, string>, id: string): Promise<string | undefined> {
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes. Claude Code hands
   // back only the first 4 MiB of what tail writes, so the file is read a stretch at a time, each from the line after
   // the last. Claude Code aborts the read under way for a drawing it drops, which is no record found: the row is read
@@ -58,8 +58,11 @@ async function timestampIn($: EngineInterface, file: string, id: string): Promis
     // What follows the last line break is a line cut short, or nothing.
     const lines = stdout.split('\n').slice(0, -1)
     if (lines.length === 0) return undefined
-    const record = lines.find((line) => recordsRow(line, id))
-    if (record) return JSON.parse(record).timestamp
+    for (const line of lines) {
+      const { timestamp } = JSON.parse(line)
+      for (const [, row] of line.matchAll(/"(?:id|uuid)":"([^"]*)"/g)) if (timestamp && !recorded.has(row)) recorded.set(row, timestamp)
+    }
+    if (recorded.has(id)) return recorded.get(id)
     linesRead += lines.length
   }
 }
@@ -68,17 +71,17 @@ async function timestampIn($: EngineInterface, file: string, id: string): Promis
  * The timestamp the transcript records for a row: the one kept, or else the one read from the transcript, which is
  * then kept, in the times file too. Undefined until the transcript holds the row.
  */
-async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, id: string): Promise<string | undefined> {
+async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, recorded: Map<string, string>, id: string): Promise<string | undefined> {
   if (kept.has(id)) return kept.get(id)
-  for (const file of await transcriptsOf($, transcript)) {
-    const timestamp = await timestampIn($, file, id)
-    if (timestamp) {
-      kept.set(id, timestamp)
-      await $.fs.write(timesFile(transcript), timesText(kept))
-      return timestamp
-    }
+  for (const file of recorded.has(id) ? [] : await transcriptsOf($, transcript)) {
+    if (await timestampIn($, file, recorded, id)) break
   }
-  return undefined
+  const timestamp = recorded.get(id)
+  if (timestamp) {
+    kept.set(id, timestamp)
+    await $.fs.write(timesFile(transcript), timesText(kept))
+  }
+  return timestamp
 }
 
 export const register: Register = (on) => {
@@ -86,6 +89,7 @@ export const register: Register = (on) => {
   let transcript = ''
   // The times read so far, as the transcript records them, by the id of their row: what the times file holds.
   let kept = new Map<string, string>()
+  const recorded = new Map<string, string>()
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
     kept = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
@@ -108,7 +112,7 @@ export const register: Register = (on) => {
     if (e.component === 'ToolResult') return h(Box, { flexDirection: 'row' }, h(Text, null, NO_TIME), await next(e)) as RenderElement
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
-    const timestamp = await recordedTimestamp($, transcript, kept, id)
+    const timestamp = await recordedTimestamp($, transcript, kept, recorded, id)
     const time = h(Text, { dimColor: true }, `${timestamp ? timeOfDay(timestamp) : NOT_YET} `)
     // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside
     // the ⏺. Above a subagent's prompt from main it draws its "From main" label in place of the blank line.
