@@ -1,4 +1,5 @@
 import type { EngineInterface, Register } from 'claude-code'
+import { register as registerRowTime } from '../row_time/rule'
 
 const AGENT_REASON =
   'Every subagent must run on a model appropriately capable for its task. Retry this call with the model parameter set to that model.'
@@ -84,7 +85,8 @@ async function isSavedWorkflow($: EngineInterface, name: string): Promise<boolea
   return false
 }
 
-export const register: Register = (on) => {
+export const register: Register = (on, options) => {
+  registerRowTime(on, options)
   // The ids of the Workflow calls running a script Claude could have written, which its agents' spawns carry as their
   // tool_use_id. A plugin can't call Workflow (the engine refuses it), so every call seen here is Claude's.
   // No .catch, as with this plugin's other rules: if a hook fails, the engine skips it and the call goes through.
