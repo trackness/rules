@@ -411,6 +411,14 @@ test('a row drawn before the session starts, as a resumed session\'s rows are, i
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })
 
+test('a status line under the logo, which the transcript does not record, is left as Claude Code draws it', async ($, on) => {
+  host(on, { [TRANSCRIPT]: SKILL_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const notice = { text: 'Debug mode enabled · logging to /home/me/debug.log', command: null }
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'InfoNotice', requestId: `notice:${notice.text}`, props: notice })
+  expect(await ui.drawn()).toMatchObject({ type: 'engine' })
+})
+
 test('the file keeps the time of every row drawn at once', async ($, on) => {
   const files: Record<string, string> = { [TRANSCRIPT]: REPLY_SESSION }
   host(on, files)
