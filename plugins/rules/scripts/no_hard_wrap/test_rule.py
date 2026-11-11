@@ -1,12 +1,15 @@
 """Tests for "No hard-wrapped Markdown". Run from the repo root: uv run pytest"""
 import io
 import json
+import subprocess
+from pathlib import Path
 
 import pytest
 
 from .rule import hard_wraps, main
 
-WRAPPED = "# Title\n\nThis paragraph runs on\nto a second line.\n"
+SCRIPT = Path(__file__).resolve().parent / "rule.py"
+WRAPPED ="# Title\n\nThis paragraph runs on\nto a second line.\n"
 
 
 def write_call(file_path, content):
@@ -60,6 +63,12 @@ def test_main_blocks_write_of_wrapped_markdown(tmp_path):
 
 def test_main_blocks_write_of_wrapped_markdown_with_long_extension(tmp_path):
     assert main(write_call(tmp_path / "README.markdown", WRAPPED), io.StringIO()) == 2
+
+
+def test_the_script_run_as_a_hook_blocks_write_of_wrapped_markdown(tmp_path):
+    """Claude Code runs the script by its path with the tool call on stdin, and takes exit code 2 as a block."""
+    result = subprocess.run([SCRIPT], input=write_call(tmp_path / "README.md", WRAPPED).getvalue(), capture_output=True, text=True)
+    assert result.returncode == 2
 
 
 def test_main_block_gives_a_reason(tmp_path):
