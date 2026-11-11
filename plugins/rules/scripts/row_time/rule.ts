@@ -22,7 +22,8 @@ export const register: Register = (on) => {
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
     const record = stdout.split('\n').find((line) => recordsRow(line, id))
     const { Box, Text } = $.ui.resolve(e)
-    const time = h(Text, { dimColor: true }, `${timeOfDay(JSON.parse(record as string).timestamp)} `)
+    const shown = record === undefined ? '--:--' : timeOfDay(JSON.parse(record).timestamp)
+    const time = h(Text, { dimColor: true }, `${shown} `)
     // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside the ⏺.
     return h(Box, { flexDirection: 'row' }, h(Box, { marginTop: 1 }, time), await next(e)) as RenderElement
   })
