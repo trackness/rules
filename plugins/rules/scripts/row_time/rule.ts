@@ -141,6 +141,8 @@ export const register: Register = (on) => {
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
     kept.times = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
+    // Claude Code draws a resumed session's rows before it starts the session, while the transcript is not yet
+    // known: they are drawn again now that it is.
     $.ui.invalidate('ui.render')
     return next(e)
   })
