@@ -121,15 +121,21 @@ type Kept = {
   times: Map<string, string>
   /** The last write of the times file, which the next one follows. */
   written: Promise<void>
+  /** The write that waits for the one under way and has not yet started: it writes every time kept by when it starts. */
+  waiting?: Promise<void>
 }
 
 /** Keeps a row's time, in the times file too. */
 async function keep($: EngineInterface, transcript: string, kept: Kept, id: string, timestamp: string): Promise<void> {
   kept.times.set(id, timestamp)
-  const write = () => $.fs.write(timesFile(transcript), timesText(kept.times))
+  const write = () => {
+    delete kept.waiting
+    return $.fs.write(timesFile(transcript), timesText(kept.times))
+  }
   // The file is written whole, and Claude Code carries out the writes under way at once in no set order: each write
-  // follows the last, made or refused, so the one that lands last holds every time.
-  await (kept.written = kept.written.then(write, write))
+  // follows the last, made or refused, so the one that lands last holds every time. A time kept while a write waits
+  // goes in that write, so a write per row cannot queue up and eat the hook's time.
+  await (kept.waiting ??= kept.written = kept.written.then(write, write))
 }
 
 /** The read now under way of a session's transcripts, or else one started to look for a row. */

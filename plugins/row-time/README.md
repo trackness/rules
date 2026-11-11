@@ -38,7 +38,7 @@ Claude Code draws a resumed session's rows before it tells a mod where the trans
 
 ## The times file
 
-The time of each row drawn is kept in a file beside the transcript, under the transcript's name with `.times` in place of `.jsonl`. It holds one line per row: the row's id, then the timestamp exactly as the transcript records it. The mod reads the file when the session starts, and a row whose time is in it is drawn without reading the transcript. The file is written whole, one write at a time, because Claude Code carries out writes made at once in no set order.
+The time of each row drawn is kept in a file beside the transcript, under the transcript's name with `.times` in place of `.jsonl`. It holds one line per row: the row's id, then the timestamp exactly as the transcript records it. The mod reads the file when the session starts, and a row whose time is in it is drawn without reading the transcript. The file is written whole, one write at a time, because Claude Code carries out writes made at once in no set order. At most one write waits behind the one under way, and every time kept while it waits goes into it, so rows drawn at once share a write.
 
 ## What is left as Claude Code draws it
 

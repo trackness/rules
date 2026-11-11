@@ -36,9 +36,9 @@ const STDOUT_LIMIT = 4 * 1024 * 1024
 const READ_ON = 'tail -c "+$1" "$2" | head -c 4194305'
 
 // The host beneath the plugin: a session that starts, and its files. A plugin's own file read refuses a file over
-// 4 MiB, which a transcript passes, so the files are read from a byte on by READ_ON. A write replaces a file whole.
-// Answers with the commands the plugin ran.
-function host(on: On, files: Record<string, string>, commandsAborted = 0) {
+// 4 MiB, which a transcript passes, so the files are read from a byte on by READ_ON. A write replaces a file whole,
+// and the path of each is noted in `written`. Answers with the commands the plugin ran.
+function host(on: On, files: Record<string, string>, commandsAborted = 0, written: string[] = []) {
   const ran: (readonly string[])[] = []
   on('classic.SessionStart', () => ({}))
   on('fs.read', ($, e) => {
@@ -49,6 +49,7 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0) {
   // Claude Code carries out the writes a plugin has under way at once in no set order: here, the latest first.
   const writesUnderWay: (() => void)[] = []
   on('fs.write', async ($, e) => {
+    written.push(e.path)
     writesUnderWay.push(() => {
       files[e.path] = e.text
     })
@@ -488,4 +489,12 @@ test('the file keeps the time of every row drawn at once', async ($, on) => {
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   await Promise.all([drawSkillRow($), drawReplyRow($)])
   expect(files[TIMES]).toBe(`${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:32:41.970Z\n`)
+})
+
+test('rows drawn at once share one write of the file', async ($, on) => {
+  const written: string[] = []
+  host(on, { [TRANSCRIPT]: REPLY_SESSION }, 0, written)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  await Promise.all([drawSkillRow($), drawReplyRow($)])
+  expect(written).toEqual([TIMES])
 })
