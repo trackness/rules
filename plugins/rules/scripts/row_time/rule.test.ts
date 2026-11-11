@@ -98,3 +98,26 @@ test('a reply row shows the time the transcript records for its text', async ($,
   const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'AssistantMessage', requestId: REPLY_ID, props: REPLY })
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:32:41.970Z')} `)
 })
+
+// One call of a run of reads, as a folded run's row carries it.
+function read(toolUseId: string, path: string) {
+  return { tool_use_id: toolUseId, tool: 'Read', input: { file_path: path }, isRunning: false, isErrored: false, isInterrupted: false }
+}
+
+test('a run of tool calls folded into one line shows the time of its first call', async ($, on) => {
+  const readme = read('toolu_01X3dkg4hJLyTckexfy9gDxu', '/srv/work/README.md')
+  const contributing = read('toolu_01XTEN2VL3Mhc1dMcMLt29rz', '/srv/work/CONTRIBUTING.md')
+  // A session in which Claude read two files, a minute apart.
+  const session = transcript(
+    user('9ede0371-94f3-4870-99bf-a7c678837b16', '2026-11-10T09:40:52.249Z', 'Read the README and the contributing guide'),
+    assistant('293589d0-56e7-4054-97df-b0b2665696e7', '2026-11-10T09:41:07.346Z', { type: 'tool_use', id: readme.tool_use_id, name: 'Read', input: readme.input }),
+    user('ef33aa01-5c82-44ac-b682-64d7d7ff8d71', '2026-11-10T09:41:07.568Z', [{ type: 'tool_result', tool_use_id: readme.tool_use_id, content: '# rules' }]),
+    assistant('e3915a8d-e053-4bfd-8d18-364e8d171342', '2026-11-10T09:42:30.521Z', { type: 'tool_use', id: contributing.tool_use_id, name: 'Read', input: contributing.input }),
+    user('ae507d63-d538-413e-b2ca-34432746deac', '2026-11-10T09:42:30.746Z', [{ type: 'tool_result', tool_use_id: contributing.tool_use_id, content: '# Contributing' }]),
+  )
+  host(on, { [TRANSCRIPT]: session })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const run = { calls: [readme, contributing], isActive: false, isExpanded: false, isCallsOnly: true }
+  const ui = await $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolGroup', requestId: 'collapsed-293589d0-56e7-4054-97df-b0b2665696e7', props: run })
+  expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:41:07.346Z')} `)
+})
