@@ -22,18 +22,22 @@ function timesFile(transcript: string): string {
 }
 
 /** The timestamp the transcript records for a row, kept in the times file once read; undefined until the transcript holds the row. */
-async function recordedTimestamp($: EngineInterface, transcript: string, id: string): Promise<string | undefined> {
+async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, id: string): Promise<string | undefined> {
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
   const { stdout } = await $.process.run(['tail', '-n', '+1', transcript])
   const record = stdout.split('\n').find((line) => recordsRow(line, id))
   const timestamp: string | undefined = record && JSON.parse(record).timestamp
-  if (timestamp) await $.fs.write(timesFile(transcript), `${id} ${timestamp}\n`)
+  if (timestamp) {
+    kept.set(id, timestamp)
+    await $.fs.write(timesFile(transcript), [...kept].map(([row, at]) => `${row} ${at}\n`).join(''))
+  }
   return timestamp
 }
 
 export const register: Register = (on) => {
   // The session's transcript file: empty until the session starts, and for a session that keeps none.
   let transcript = ''
+  const kept = new Map<string, string>()
   on('classic.SessionStart', ($, e, next) => {
     transcript = e.transcript_path
     return next(e)
@@ -48,7 +52,7 @@ export const register: Register = (on) => {
     if (transcript === '') return next(e)
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
-    const timestamp = await recordedTimestamp($, transcript, id)
+    const timestamp = await recordedTimestamp($, transcript, kept, id)
     const { Box, Text } = $.ui.resolve(e)
     const time = h(Text, { dimColor: true }, `${timestamp ? timeOfDay(timestamp) : NOT_YET} `)
     // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside the ⏺.
