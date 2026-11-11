@@ -46,7 +46,7 @@ The name is checked when the branch is made, before it is pushed, while renaming
 
 ## Pushes
 
-When a session starts, the script adds `GIT_CONFIG_*` variables to the session's environment, after any already there, that register it as git's `pre-push` hook. Git then runs it before every push made through Claude's Bash commands, and still runs the repository's own `pre-push` hook after it, even when this one refuses the push. Nothing is installed in any repository or git config, so pushes made outside Claude are not checked.
+When a session starts, the script registers itself as git's `pre-push` hook under the name `conventional-branch`, as the plugin's [git hooks](../../README.md#git-hooks) are registered. Git then runs it before every push made through Claude's Bash commands, and still runs the repository's own `pre-push` hook after it, even when this one refuses the push.
 
 Git passes the hook every ref the push would update, and the hook refuses the push, so that git pushes nothing, when any of them would create a branch on the remote whose name does not follow Conventional Branch 1.0.0, with a message naming each such branch, such as:
 
@@ -67,8 +67,4 @@ The hook checks the name the branch would have on the remote, not the command, s
 
 - a local branch made in a way the Bash check does not read, until a push creates it on the remote, and never if it is never pushed
 - `git push --no-verify`, which skips the `pre-push` hook, and `git send-pack`, which runs no `pre-push` hook
-- a git command that turns the hook off, such as with `-c hook.conventional-branch.enabled=false` or with `-c hook.conventional-branch.event=`, which empties its list of events, or that runs without the session's `GIT_CONFIG_*` variables or with them changed, such as under `GIT_CONFIG_COUNT=0` or `env -i`
-- a repository or user whose git config sets `hook.conventional-branch.enabled` to `false`, which turns the hook off for every later push there
-- pushes made with a git older than 2.54.0, the first release with hooks defined in config
-- pushes that PowerShell commands make, since the lines the script adds are not plain assignments, so Claude Code gives PowerShell commands none of the session's `CLAUDE_ENV_FILE` variables, from this hook or any other. On Windows without Git Bash, Claude Code has no Bash tool, only PowerShell, and runs the `SessionStart` hook in PowerShell with no `CLAUDE_ENV_FILE` to register the hook in; the hook's command, written for a POSIX shell, may not run there at all, and if it does, the script tells Claude at session start that the check on pushes is not active.
-- pushes made outside Claude's Bash commands
+- what none of the plugin's [git hooks](../../README.md#git-hooks) checks, such as a push run with `-c hook.conventional-branch.enabled=false`, a git older than 2.54.0 or git run by a PowerShell command

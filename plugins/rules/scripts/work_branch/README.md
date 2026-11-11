@@ -24,7 +24,7 @@ Allowed:
 
 ## Commits
 
-When a session starts, the script adds `GIT_CONFIG_*` variables to the session's environment, after any already there, that register it as git's `pre-commit` hook. Git then runs it before every commit that `git commit` makes through Claude's Bash commands, an amended one included. Nothing is installed in any repository or git config, so commits made outside Claude are not checked.
+When a session starts, the script registers itself as git's `pre-commit` hook under the name `work-branch`, as the plugin's [git hooks](../../README.md#git-hooks) are registered. Git then runs it before every commit that `git commit` makes through Claude's Bash commands, an amended one included.
 
 The hook rejects the commit when the repository is not on a work branch, with a message such as:
 
@@ -38,6 +38,5 @@ This check is what stops the work a Bash command does. Nothing in a command's te
 - files changed by any other tool, such as one an MCP server provides
 - `git commit --no-verify`, which skips the `pre-commit` hook
 - commits that other git commands make on main, master or develop, such as `git cherry-pick`, `git revert` and `git merge`, whether it fast-forwards or makes a merge commit: none runs a `pre-commit` hook, and a fast-forward is how `git pull` brings main up to date
-- a git command that turns the hook off, such as with `-c hook.work-branch.enabled=false` or with `-c hook.work-branch.event=`, which empties its list of events, or that runs without the session's `GIT_CONFIG_*` variables, such as under `GIT_CONFIG_COUNT=0`
 - a repository whose shared branch has another name, such as trunk: only main, master and develop are kept free of work
-- commits made outside Claude's Bash commands
+- what none of the plugin's [git hooks](../../README.md#git-hooks) checks, such as a commit run with `-c hook.work-branch.enabled=false`, a git older than 2.54.0 or git run by a PowerShell command

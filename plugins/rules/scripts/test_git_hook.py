@@ -87,7 +87,7 @@ def test_registered_command_runs_as_git_hook_for_its_event(tmp_path):
     ),
 ])
 def test_ways_past_every_git_rule(tmp_path, command):
-    """Each command commits despite the registered hook: turning the hook off by its name, or running git without the session's GIT_CONFIG_*."""
+    """Each command commits despite the registered hook, as the plugin README's Git hooks section says of every git rule."""
     repo = new_repo(tmp_path)
     assert run_with_env_files([session_with_test_hook(tmp_path)], *command(repo)).returncode == 0
 
