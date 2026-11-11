@@ -311,17 +311,21 @@ test('a slash command\'s output, which Claude Code draws under the command\'s ow
   expect(await ui.drawn()).toMatchObject({ type: 'engine' })
 })
 
-test('a row the transcript records past its first 4 MiB shows its time', async ($, on) => {
-  // A session in which Claude read a 410 KB log twelve times over, 5 MB of transcript, before it called the Skill tool.
-  const log = '2026-11-10T09:00:00.000Z GET /health 200\n'.repeat(10_000)
-  const reads = Array.from({ length: 12 }, (_, n) => {
-    const call = read(`toolu_01${String(n).padStart(22, '0')}`, '/srv/work/server.log')
-    return transcript(
+// Twelve reads of one 410 KB log, as their rows carry the calls.
+const LOG_READS = Array.from({ length: 12 }, (_, n) => read(`toolu_01${String(n).padStart(22, '0')}`, '/srv/work/server.log'))
+const LOG = '2026-11-10T09:00:00.000Z GET /health 200\n'.repeat(10_000)
+
+// A session in which Claude made those reads, 5 MB of transcript, before it called the Skill tool.
+const LONG_SESSION =
+  LOG_READS.map((call, n) =>
+    transcript(
       assistant(`293589d0-56e7-4054-97df-${String(n).padStart(12, '0')}`, '2026-11-10T09:20:07.346Z', { type: 'tool_use', id: call.tool_use_id, name: 'Read', input: call.input }),
-      user(`ef33aa01-5c82-44ac-b682-${String(n).padStart(12, '0')}`, '2026-11-10T09:20:07.568Z', [{ type: 'tool_result', tool_use_id: call.tool_use_id, content: log }]),
-    )
-  })
-  host(on, { [TRANSCRIPT]: reads.join('') + SKILL_SESSION })
+      user(`ef33aa01-5c82-44ac-b682-${String(n).padStart(12, '0')}`, '2026-11-10T09:20:07.568Z', [{ type: 'tool_result', tool_use_id: call.tool_use_id, content: LOG }]),
+    ),
+  ).join('') + SKILL_SESSION
+
+test('a row the transcript records past its first 4 MiB shows its time', async ($, on) => {
+  host(on, { [TRANSCRIPT]: LONG_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const ui = await drawSkillRow($)
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
@@ -367,18 +371,10 @@ test('rows drawn at once share one read of the transcript', async ($, on) => {
 })
 
 test('a row drawn at once with a row recorded 4 MiB before it shows its time', async ($, on) => {
-  // A session in which Claude read a 410 KB log twelve times over, 5 MB of transcript, before it called the Skill tool.
-  const log = '2026-11-10T09:00:00.000Z GET /health 200\n'.repeat(10_000)
-  const calls = Array.from({ length: 12 }, (_, n) => read(`toolu_01${String(n).padStart(22, '0')}`, '/srv/work/server.log'))
-  const reads = calls.map((call, n) =>
-    transcript(
-      assistant(`293589d0-56e7-4054-97df-${String(n).padStart(12, '0')}`, '2026-11-10T09:20:07.346Z', { type: 'tool_use', id: call.tool_use_id, name: 'Read', input: call.input }),
-      user(`ef33aa01-5c82-44ac-b682-${String(n).padStart(12, '0')}`, '2026-11-10T09:20:07.568Z', [{ type: 'tool_result', tool_use_id: call.tool_use_id, content: log }]),
-    ),
-  )
-  host(on, { [TRANSCRIPT]: reads.join('') + SKILL_SESSION })
+  host(on, { [TRANSCRIPT]: LONG_SESSION })
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
-  const firstRead = $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: calls[0].tool_use_id, props: { ...calls[0], isExpanded: false } })
+  // The first read's row, recorded at the top of the transcript.
+  const firstRead = $.ui.mount({ plugin: 'rules', surface: 'terminal', component: 'ToolUse', requestId: LOG_READS[0].tool_use_id, props: { ...LOG_READS[0], isExpanded: false } })
   const [, ui] = await Promise.all([firstRead, drawSkillRow($)])
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T09:30:16.161Z')} `)
 })

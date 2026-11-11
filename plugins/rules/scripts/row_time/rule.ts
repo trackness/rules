@@ -64,14 +64,14 @@ type Reading = {
 }
 
 /**
- * The timestamp a transcript file records for a row in the lines not read before, or undefined where they hold no
- * record of the row. The time of every row read on the way is noted, and the lines are counted as read.
+ * Reads on in a transcript file, from the line after the last one read to its end: the time of every row in those
+ * lines is noted, and the lines are counted as read.
  */
-async function timestampIn($: EngineInterface, file: string, { linesRead, recorded }: Reading, id: string): Promise<string | undefined> {
+async function readOn($: EngineInterface, file: string, { linesRead, recorded }: Reading): Promise<void> {
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes. Claude Code hands
   // back only the first 4 MiB of what tail writes, so the file is read a stretch at a time, each from the line after
-  // the last. Claude Code aborts the read under way for a drawing it drops, which is no record found: the row is read
-  // again when next drawn.
+  // the last. Claude Code aborts the read under way for a drawing it drops, which is a read of nothing: the lines are
+  // read when a row is next looked for.
   for (;;) {
     const read = linesRead.get(file) ?? 0
     const { stdout, isStdoutTruncated } = await $.process.run(['tail', '-n', `+${read + 1}`, file]).catch(() => ({ stdout: '', isStdoutTruncated: false }))
@@ -79,15 +79,18 @@ async function timestampIn($: EngineInterface, file: string, { linesRead, record
     const lines = stdout.split('\n').slice(0, -1)
     for (const line of lines) noteTimes(line, recorded)
     linesRead.set(file, read + lines.length)
-    // The reading ends at the row, or where there is no more to read: the stretch was handed back whole, or held no
-    // whole line, being cut inside a first line longer than Claude Code hands back.
-    if (!isStdoutTruncated || lines.length === 0) return recorded.get(id)
+    // There is no more to read: the stretch was handed back whole, or held no whole line, being cut inside a first
+    // line longer than Claude Code hands back.
+    if (!isStdoutTruncated || lines.length === 0) return
   }
 }
 
-/** Reads on in a session's transcripts, one after another, as far as the record of a row. */
+/** Reads on in a session's transcripts, one after another, as far as the one that records a row. */
 async function lookFor($: EngineInterface, transcript: string, reading: Reading, id: string): Promise<void> {
-  for (const file of await transcriptsOf($, transcript)) if (await timestampIn($, file, reading, id)) break
+  for (const file of await transcriptsOf($, transcript)) {
+    await readOn($, file, reading)
+    if (reading.recorded.has(id)) break
+  }
 }
 
 /**
