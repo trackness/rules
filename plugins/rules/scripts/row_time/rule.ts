@@ -75,15 +75,18 @@ async function timestampIn($: EngineInterface, file: string, linesRead: Map<stri
   }
 }
 
+async function lookFor($: EngineInterface, transcript: string, linesRead: Map<string, number>, recorded: Map<string, string>, id: string): Promise<void> {
+  for (const file of await transcriptsOf($, transcript)) if (await timestampIn($, file, linesRead, recorded, id)) break
+}
+
 /**
  * The timestamp the transcript records for a row: the one kept, or else the one noted in a read of the transcript,
  * made now unless an earlier one has the row, which is then kept, in the times file too. Undefined until the
  * transcript holds the row.
  */
-async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, linesRead: Map<string, number>, recorded: Map<string, string>, id: string): Promise<string | undefined> {
+async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, linesRead: Map<string, number>, recorded: Map<string, string>, underWay: { read?: Promise<void> }, id: string): Promise<string | undefined> {
   if (kept.has(id)) return kept.get(id)
-  const toRead = recorded.has(id) ? [] : await transcriptsOf($, transcript)
-  for (const file of toRead) if (await timestampIn($, file, linesRead, recorded, id)) break
+  if (!recorded.has(id)) await (underWay.read ??= lookFor($, transcript, linesRead, recorded, id).finally(() => delete underWay.read))
   const timestamp = recorded.get(id)
   if (timestamp) {
     kept.set(id, timestamp)
@@ -101,6 +104,7 @@ export const register: Register = (on) => {
   const recorded = new Map<string, string>()
   // How many lines of each transcript file have been read, by the file: its next read starts at the line after them.
   const linesRead = new Map<string, number>()
+  const underWay: { read?: Promise<void> } = {}
   on('classic.SessionStart', async ($, e, next) => {
     transcript = e.transcript_path
     kept = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
@@ -123,7 +127,7 @@ export const register: Register = (on) => {
     if (e.component === 'ToolResult') return h(Box, { flexDirection: 'row' }, h(Text, null, NO_TIME), await next(e)) as RenderElement
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
-    const timestamp = await recordedTimestamp($, transcript, kept, linesRead, recorded, id)
+    const timestamp = await recordedTimestamp($, transcript, kept, linesRead, recorded, underWay, id)
     const time = h(Text, { dimColor: true }, `${timestamp ? timeOfDay(timestamp) : NOT_YET} `)
     // Claude Code draws the blank line above a row as part of the row, so the time goes one line down to sit beside
     // the ⏺. Above a subagent's prompt from main it draws its "From main" label in place of the blank line.
