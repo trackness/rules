@@ -76,3 +76,8 @@ test('the time stands to the left of the row Claude Code draws', async ($, on) =
   const ui = await skillRow($, on)
   expect(await ui.drawn()).toMatchObject({ type: 'Box', props: { flexDirection: 'row' }, children: [{}, { type: 'engine' }] })
 })
+
+test('the time is dim', async ($, on) => {
+  const ui = await skillRow($, on)
+  expect(await ui.find({ type: 'Text' })).toMatchObject({ props: { dimColor: true } })
+})
