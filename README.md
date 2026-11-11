@@ -1,10 +1,11 @@
 # rules
 
-This repo is the Claude Code plugin marketplace `rules`, holding four plugins, each a folder in `plugins/`. Each plugin's README says what it does and how to install it.
+This repo is the Claude Code plugin marketplace `rules`, holding five plugins, each a folder in `plugins/`. Each plugin's README says what it does and how to install it.
 
 | Plugin | What it is |
 |---|---|
-| [`rules`](plugins/rules/README.md) | Six Python hook rules on how Claude uses its tools |
+| [`rules`](plugins/rules/README.md) | Three Python hook rules on how Claude uses its tools |
+| [`git-rules`](plugins/git-rules/README.md) | Three Python rules that git enforces on the commits, branches and pushes Claude makes |
 | [`subagent-model`](plugins/subagent-model/README.md) | A mod: the explicit subagent model rule |
 | [`row-time`](plugins/row-time/README.md) | A mod: row times |
 | [`agent-row`](plugins/agent-row/README.md) | A Python `subagentStatusLine`: each background agent's model and description in its row |

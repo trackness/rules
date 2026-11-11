@@ -1,0 +1,6 @@
+{
+  "name": "git-rules",
+  "description": "Rules on the commits, branches and pushes Claude makes, which git enforces through hooks registered for each session.",
+  "author": { "name": "trackness" },
+  "license": "MIT"
+}
