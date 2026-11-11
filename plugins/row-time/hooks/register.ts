@@ -60,13 +60,15 @@ function keptTimes(text: string): Map<string, string> {
 }
 
 /**
- * The transcripts a session's rows are recorded in: the session's own, then those of its subagents, which Claude Code
- * keeps in the session's folder beside it.
+ * The transcripts a session's rows are recorded in that may hold lines not yet read: the session's own, then those of
+ * its subagents that have grown since they were last read, which Claude Code keeps in the session's folder beside it.
  */
-async function transcriptsOf($: EngineInterface, transcript: string): Promise<string[]> {
+async function transcriptsOf($: EngineInterface, transcript: string, { bytesRead }: Reading): Promise<string[]> {
   const subagents = transcript.replace(/\.jsonl$/, '/subagents')
   const theirs = await $.fs.list(subagents).catch(() => [])
-  return [transcript, ...theirs.map((entry) => `${subagents}/${entry.name}`)]
+  // A listing gives a link the size 0, whatever it leads to, so a link is read on each time.
+  const grown = theirs.filter((entry) => entry.name.endsWith('.jsonl') && (entry.isLink || entry.size > (bytesRead.get(`${subagents}/${entry.name}`) ?? 0)))
+  return [transcript, ...grown.map((entry) => `${subagents}/${entry.name}`)]
 }
 
 /** What has been read of a session's transcripts so far. */
@@ -105,7 +107,7 @@ async function readOn($: EngineInterface, file: string, { bytesRead, recorded }:
 
 /** Reads on in a session's transcripts, one after another, as far as the one that records a row. */
 async function lookFor($: EngineInterface, transcript: string, reading: Reading, id: string): Promise<void> {
-  for (const file of await transcriptsOf($, transcript)) {
+  for (const file of await transcriptsOf($, transcript, reading)) {
     await readOn($, file, reading)
     if (reading.recorded.has(id)) break
   }

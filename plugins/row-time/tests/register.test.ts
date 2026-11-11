@@ -55,7 +55,9 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0) {
   on('fs.list', ($, e) => {
     const names = Object.keys(files).filter((path) => path.startsWith(`${e.path}/`)).map((path) => path.slice(e.path.length + 1))
     if (names.length === 0) throw new Error(`ENOENT: no such file or directory, scandir '${e.path}'`)
-    return { value: names.filter((name) => !name.includes('/')).map((name) => ({ name, kind: 'file' as const, size: 0, mtimeMs: 0, isLink: false })) }
+    // The transcripts here are ASCII, a byte to a character.
+    const entry = (name: string) => ({ name, kind: 'file' as const, size: files[`${e.path}/${name}`]?.length ?? 0, mtimeMs: 0, isLink: false })
+    return { value: names.filter((name) => !name.includes('/')).map(entry) }
   })
   on('process.run', ($, e) => {
     ran.push(e.argv)
@@ -259,6 +261,23 @@ test('a row of a subagent shows the time the subagent\'s own transcript records 
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolUse', requestId: listing.tool_use_id, props: listing })
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T10:02:05.310Z')} `)
+})
+
+test('a row no transcript holds yet is looked for, when drawn again, only in the transcripts that have grown, and never in a subagent\'s meta file', async ($, on) => {
+  const subagents = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a/subagents'
+  const subagent = `${subagents}/agent-aa3ba150d12cc0104.jsonl`
+  const files = {
+    [TRANSCRIPT]: BEFORE_THE_CALL,
+    [subagent]: transcript(user('e7de5353-1dba-418e-b700-e4328fbfd528', '2026-11-10T10:01:40.987Z', 'List the files')),
+    // Claude Code keeps what it knows of a subagent in a file beside the subagent's transcript.
+    [`${subagents}/agent-aa3ba150d12cc0104.meta.json`]: JSON.stringify({ agentType: 'general-purpose', description: 'List the files' }),
+  }
+  const ran = host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  await ui.redraw()
+  // The file a read is of is the last word of its command.
+  expect(ran.map((argv) => argv.at(-1))).toEqual([TRANSCRIPT, subagent, TRANSCRIPT])
 })
 
 test('a row whose read of the transcript is cut short shows --:--', async ($, on) => {

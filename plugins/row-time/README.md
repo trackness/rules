@@ -53,7 +53,7 @@ The time of each row drawn is kept in a file beside the transcript, under the tr
 
 ## How it reads the transcript
 
-The mod hooks `classic.SessionStart` for the transcript's path, `session.append` to draw the rows again, and `ui.render` to draw each row. It reads a transcript with `tail`, because a mod's own file read refuses a file over 4 MiB, which a transcript passes; so it needs `tail` on the `PATH`. A subagent's transcript is looked for in the `subagents` folder that Claude Code keeps beside the session's transcript, under the session's id.
+The mod hooks `classic.SessionStart` for the transcript's path, `session.append` to draw the rows again, and `ui.render` to draw each row. It reads a transcript with `tail`, because a mod's own file read refuses a file over 4 MiB, which a transcript passes; so it needs `tail` on the `PATH`. A subagent's transcript is looked for in the `subagents` folder that Claude Code keeps beside the session's transcript, under the session's id, and read on only once the folder's listing shows it has grown past what was read of it.
 
 In one run of Claude Code, each line of a transcript is read once, however long the transcript grows:
 
