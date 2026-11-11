@@ -93,6 +93,11 @@ async function lookFor($: EngineInterface, transcript: string, reading: Reading,
   }
 }
 
+/** The read now under way of a session's transcripts, or else one started to look for a row. */
+function readUnderWay($: EngineInterface, transcript: string, reading: Reading, id: string): Promise<void> {
+  return (reading.underWay ??= lookFor($, transcript, reading, id).finally(() => delete reading.underWay))
+}
+
 /**
  * The timestamp the transcript records for a row: the one kept, or else the one noted in a read of the transcript,
  * which is then kept, in the times file too. A row no read has yet timed waits for the read under way, or starts one.
@@ -100,9 +105,11 @@ async function lookFor($: EngineInterface, transcript: string, reading: Reading,
  */
 async function recordedTimestamp($: EngineInterface, transcript: string, kept: Map<string, string>, reading: Reading, id: string): Promise<string | undefined> {
   if (kept.has(id)) return kept.get(id)
-  const waitedOn = reading.underWay
-  if (!reading.recorded.has(id)) await (reading.underWay ??= lookFor($, transcript, reading, id).finally(() => delete reading.underWay))
-  if (waitedOn && !reading.recorded.has(id)) await (reading.underWay ??= lookFor($, transcript, reading, id).finally(() => delete reading.underWay))
+  const isAnotherRowsRead = reading.underWay !== undefined
+  if (!reading.recorded.has(id)) await readUnderWay($, transcript, reading, id)
+  // Another row's read ends at the transcript that records that row, and is cut short if Claude Code drops that
+  // row's drawing: a row it leaves untimed reads on itself.
+  if (isAnotherRowsRead && !reading.recorded.has(id)) await readUnderWay($, transcript, reading, id)
   const timestamp = reading.recorded.get(id)
   if (timestamp) {
     kept.set(id, timestamp)
