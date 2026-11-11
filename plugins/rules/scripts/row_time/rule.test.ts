@@ -60,10 +60,11 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0) {
     if (ran.length <= commandsAborted) throw new Error(`rules: $.process.run(${String(e.argv[0])}) aborted`)
     const [command, flag, from, path] = e.argv
     const text = path === undefined ? undefined : files[path]
-    if (command !== 'tail' || flag !== '-n' || text === undefined) {
+    if (command !== 'tail' || (flag !== '-n' && flag !== '-c') || text === undefined) {
       return { value: { exitCode: 1, stdout: '', stderr: `${String(command)}: ${String(path)}: No such file or directory\n`, isStdoutTruncated: false, isStderrTruncated: false } }
     }
-    const stdout = text.split('\n').slice(Number(from) - 1).join('\n')
+    // From a line on, or from a byte on: the transcripts here are ASCII, a byte to a character.
+    const stdout = flag === '-n' ? text.split('\n').slice(Number(from) - 1).join('\n') : text.slice(Number(from) - 1)
     return { value: { exitCode: 0, stdout: stdout.slice(0, STDOUT_LIMIT), stderr: '', isStdoutTruncated: stdout.length > STDOUT_LIMIT, isStderrTruncated: false } }
   })
   return ran
@@ -347,17 +348,18 @@ test('a row recorded in lines already read for another row is drawn without read
   expect({ shown: (await ui.find({ type: 'Text' }))?.text, reads: ran.length }).toEqual({ shown: `${timeOfDay('2026-11-10T09:32:41.970Z')} `, reads: 1 })
 })
 
-test('a row the transcript lacked when first drawn is looked for, when drawn again, only in the lines the transcript has gained', async ($, on) => {
+test('a row the transcript lacked when first drawn is looked for, when drawn again, from the byte where the last read ended', async ($, on) => {
   const clock = mock.clock(on)
   const files = { [TRANSCRIPT]: BEFORE_THE_CALL }
   const ran = host(on, files)
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const ui = await drawSkillRow($)
   const ranForFirstDraw = ran.length
-  // The call is the transcript's third line.
   await recordSkillCall($, clock, files)
   const shown = (await ui.find({ type: 'Text' }))?.text
-  expect({ shown, ran: ran.slice(ranForFirstDraw) }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [['tail', '-n', '+3', TRANSCRIPT]] })
+  // A read that starts at a byte goes straight to it: one that starts at a line counts through every line before.
+  const fromTheCall = ['tail', '-c', `+${BEFORE_THE_CALL.length + 1}`, TRANSCRIPT]
+  expect({ shown, ran: ran.slice(ranForFirstDraw) }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [fromTheCall] })
 })
 
 test('a transcript that Claude Code hands back whole is read once for a row it does not yet hold', async ($, on) => {
