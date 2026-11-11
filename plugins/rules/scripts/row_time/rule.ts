@@ -3,6 +3,9 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 /** What a row shows in place of its time, until the transcript holds one. */
 const NOT_YET = '--:--'
 
+/** What Claude Code draws outside the transcript: the spinner, the band above the prompt and the lines under it. */
+const OUTSIDE_THE_TRANSCRIPT = ['Spinner', 'AbovePrompt', 'PromptHint', 'SessionMode']
+
 /** How long the rows wait to be drawn again after the conversation gains a row, in milliseconds. */
 const WRITE_WAIT_MS = 100
 
@@ -84,7 +87,7 @@ export const register: Register = (on) => {
     return stored
   })
   on('ui.render', async ($, e, next) => {
-    if (transcript === '' || ['Spinner', 'AbovePrompt', 'PromptHint', 'SessionMode'].includes(e.component)) return next(e)
+    if (transcript === '' || OUTSIDE_THE_TRANSCRIPT.includes(e.component)) return next(e)
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
     const timestamp = await recordedTimestamp($, transcript, kept, id)
