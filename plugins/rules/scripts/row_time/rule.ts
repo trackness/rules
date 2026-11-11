@@ -81,7 +81,7 @@ async function timestampIn($: EngineInterface, file: string, { linesRead, record
     linesRead.set(file, read + lines.length)
     // The reading ends at the row, or where there is no more to read: the stretch was handed back whole, or held no
     // whole line, being cut inside a first line longer than Claude Code hands back.
-    if (recorded.has(id) || !isStdoutTruncated || lines.length === 0) return recorded.get(id)
+    if (!isStdoutTruncated || lines.length === 0) return recorded.get(id)
   }
 }
 
