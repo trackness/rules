@@ -1,5 +1,10 @@
 import type { Register, RenderElement } from 'claude-code'
 
+/** The time of day of a transcript timestamp, as HH:MM where the session runs. */
+function timeOfDay(timestamp: string): string {
+  return new Date(timestamp).toTimeString().slice(0, 5)
+}
+
 export const register: Register = (on) => {
   let transcript = ''
   on('classic.SessionStart', ($, e, next) => {
@@ -7,9 +12,10 @@ export const register: Register = (on) => {
     return next(e)
   })
   on('ui.render', async ($, e) => {
+    // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
     const { stdout } = await $.process.run(['tail', '-n', '+1', transcript])
     const record = stdout.split('\n').find((line) => line.includes(`"id":"${e.requestId}"`))
     const { Text } = $.ui.resolve(e)
-    return h(Text, null, `${new Date(JSON.parse(record as string).timestamp).toTimeString().slice(0, 5)} `) as RenderElement
+    return h(Text, null, `${timeOfDay(JSON.parse(record as string).timestamp)} `) as RenderElement
   })
 }
