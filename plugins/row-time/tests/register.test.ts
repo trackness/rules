@@ -31,8 +31,12 @@ declare function setTimeout(callback: () => void, milliseconds: number): unknown
 // How much of what a command writes Claude Code 2.1.322 hands a plugin: the first 4 MiB, the rest dropped.
 const STDOUT_LIMIT = 4 * 1024 * 1024
 
+// How the mod reads on in a transcript, given the byte to start at and the file: tail from that byte, cut by head after
+// the 4 MiB Claude Code hands back and one byte more, which tells Claude Code there is more.
+const READ_ON = 'tail -c "+$1" "$2" | head -c 4194305'
+
 // The host beneath the plugin: a session that starts, and its files. A plugin's own file read refuses a file over
-// 4 MiB, which a transcript passes, so the files are read from a byte on by tail. A write replaces a file whole.
+// 4 MiB, which a transcript passes, so the files are read from a byte on by READ_ON. A write replaces a file whole.
 // Answers with the commands the plugin ran.
 function host(on: On, files: Record<string, string>, commandsAborted = 0) {
   const ran: (readonly string[])[] = []
@@ -63,13 +67,13 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0) {
     ran.push(e.argv)
     // Claude Code aborts the command under way for a drawing it drops: here, the first commands the plugin runs.
     if (ran.length <= commandsAborted) throw new Error(`row-time: $.process.run(${String(e.argv[0])}) aborted`)
-    const [command, flag, from, path] = e.argv
+    const [command, flag, script, , from, path] = e.argv
     const text = path === undefined ? undefined : files[path]
-    if (command !== 'tail' || flag !== '-c' || text === undefined) {
+    if (command !== 'sh' || flag !== '-c' || script !== READ_ON || text === undefined) {
       return { value: { exitCode: 1, stdout: '', stderr: `${String(command)}: ${String(path)}: No such file or directory\n`, isStdoutTruncated: false, isStderrTruncated: false } }
     }
     // The transcripts here are ASCII, a byte to a character.
-    const stdout = text.slice(Number(from) - 1)
+    const stdout = text.slice(Number(from) - 1, Number(from) - 1 + STDOUT_LIMIT + 1)
     return { value: { exitCode: 0, stdout: stdout.slice(0, STDOUT_LIMIT), stderr: '', isStdoutTruncated: stdout.length > STDOUT_LIMIT, isStderrTruncated: false } }
   })
   return ran
@@ -405,7 +409,7 @@ test('a row the transcript lacked when first drawn is looked for, when drawn aga
   await recordSkillCall($, clock, files)
   const shown = (await ui.find({ type: 'Text' }))?.text
   // A read that starts at a byte goes straight to it: one that starts at a line counts through every line before.
-  const fromTheCall = ['tail', '-c', `+${BEFORE_THE_CALL.length + 1}`, TRANSCRIPT]
+  const fromTheCall = ['sh', '-c', READ_ON, 'sh', String(BEFORE_THE_CALL.length + 1), TRANSCRIPT]
   expect({ shown, ran: ran.slice(ranForFirstDraw) }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [fromTheCall] })
 })
 

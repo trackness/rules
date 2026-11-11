@@ -87,13 +87,15 @@ type Reading = {
  */
 async function readOn($: EngineInterface, file: string, { bytesRead, recorded }: Reading): Promise<void> {
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes. Claude Code hands
-  // back only the first 4 MiB of what tail writes, so the file is read a stretch at a time, each from the byte after
-  // the last. tail goes straight to a byte it is told to start at, where it would count through every line before a
-  // line. Claude Code aborts the read under way for a drawing it drops, which is a read of nothing: the lines are
-  // read when a row is next looked for.
+  // back only the first 4 MiB of what a command writes, so the file is read a stretch at a time, each from the byte
+  // after the last. tail goes straight to a byte it is told to start at, where it would count through every line
+  // before a line. head stops each stretch one byte past those 4 MiB, the byte that tells Claude Code there is more,
+  // so tail does not write out the rest of the file for every stretch. Claude Code aborts the read under way for a
+  // drawing it drops, which is a read of nothing: the lines are read when a row is next looked for.
   for (;;) {
     const read = bytesRead.get(file) ?? 0
-    const { stdout, isStdoutTruncated } = await $.process.run(['tail', '-c', `+${read + 1}`, file]).catch(() => ({ stdout: '', isStdoutTruncated: false }))
+    const stretch = ['sh', '-c', 'tail -c "+$1" "$2" | head -c 4194305', 'sh', String(read + 1), file]
+    const { stdout, isStdoutTruncated } = await $.process.run(stretch).catch(() => ({ stdout: '', isStdoutTruncated: false }))
     // What follows the last line break is a line cut short, or nothing.
     const wholeLines = stdout.slice(0, stdout.lastIndexOf('\n') + 1)
     for (const line of wholeLines.split('\n').slice(0, -1)) noteTimes(line, recorded)
