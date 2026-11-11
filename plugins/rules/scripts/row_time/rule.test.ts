@@ -354,3 +354,14 @@ test('a transcript that Claude Code hands back whole is read once for a row it d
   await drawSkillRow($)
   expect(ran).toEqual([['tail', '-n', '+1', TRANSCRIPT]])
 })
+
+test('rows drawn at once share one read of the transcript', async ($, on) => {
+  const ran = host(on, { [TRANSCRIPT]: REPLY_SESSION })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const rows = await Promise.all([drawSkillRow($), drawReplyRow($)])
+  const shown = await Promise.all(rows.map(async (ui) => (await ui.find({ type: 'Text' }))?.text))
+  expect({ shown, ran }).toEqual({
+    shown: [`${timeOfDay('2026-11-10T09:30:16.161Z')} `, `${timeOfDay('2026-11-10T09:32:41.970Z')} `],
+    ran: [['tail', '-n', '+1', TRANSCRIPT]],
+  })
+})
