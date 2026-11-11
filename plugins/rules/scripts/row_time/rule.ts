@@ -29,6 +29,7 @@ export const register: Register = (on) => {
     return stored
   })
   on('ui.render', async ($, e, next) => {
+    if (transcript === '') return next(e)
     // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes.
     const { stdout } = await $.process.run(['tail', '-n', '+1', transcript])
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId
