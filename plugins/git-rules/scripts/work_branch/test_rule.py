@@ -199,6 +199,14 @@ def test_main_allows_edit_in_a_worktree_on_a_work_branch_while_the_session_is_in
     assert main(tool_call(tmp_path / "worktree" / "notes.md"), io.StringIO(), io.StringIO()) == 0
 
 
+def test_main_goes_by_the_checkout_that_holds_the_file_whatever_git_dir_claude_code_was_started_with(tmp_path, monkeypatch):
+    """A git hook that starts Claude Code hands it GIT_DIR, here naming a repository on a work branch, which git would use over the file's."""
+    repo = repo_on(tmp_path, "main")
+    other = repo_on(tmp_path / "other", "feature/add-login")
+    monkeypatch.setenv("GIT_DIR", str(other / ".git"))
+    assert main(tool_call(repo / "notes.md"), io.StringIO(), io.StringIO()) == 2
+
+
 def test_the_script_run_as_a_hook_blocks_an_edit_in_a_repository_on_main(tmp_path):
     """Claude Code passes the tool call on stdin, and takes exit code 2 as a block."""
     repo = repo_on(tmp_path, "main")

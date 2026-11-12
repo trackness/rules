@@ -14,7 +14,7 @@ Blocks an Edit, Write or NotebookEdit call for a file in a repository that is no
 
 > Blocked: work happens only on a branch, and this file's repository is on main. Create a branch with git switch -c `<type>/<description>`, then make the change there.
 
-The check goes by the checkout that holds the file, not by the session's working directory. So a file in a worktree on its own branch can be changed while the main checkout is on main, and a file in a checkout on main is blocked even when the session started somewhere else. For a new file in a directory that does not exist yet, git is asked in the nearest directory that does.
+The check goes by the checkout that holds the file, not by the session's working directory or a `GIT_DIR` Claude Code was started with. So a file in a worktree on its own branch can be changed while the main checkout is on main, and a file in a checkout on main is blocked even when the session started somewhere else. For a new file in a directory that does not exist yet, git is asked in the nearest directory that does.
 
 Allowed:
 

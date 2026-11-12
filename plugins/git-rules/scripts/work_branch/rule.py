@@ -83,6 +83,9 @@ def main(stdin, stdout, stderr, env_file=None):
     if hook_input.get("hook_event_name") == "SessionStart":
         register(env_file, stdout)
         return 0
+    # A git hook that starts Claude Code hands it GIT_DIR and the like, which would point git at that repository, not the file's.
+    for name in git(".", "rev-parse", "--local-env-vars").stdout.split():
+        os.environ.pop(name, None)
     tool_input = hook_input["tool_input"]
     path = Path(tool_input.get("file_path") or tool_input["notebook_path"])  # NotebookEdit's name for its file
     # Write makes the directories a new file needs, so git is asked in the nearest one that exists.
