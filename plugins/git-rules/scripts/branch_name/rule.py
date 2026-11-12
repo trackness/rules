@@ -18,7 +18,6 @@ ENVIRONMENT_ASSIGNMENT = r"[A-Za-z_]\w*="
 OPERATOR_CHARACTERS = "();<>|&\n"
 REDIRECTION = r"&?[<>]+[&|]?"
 GIT_OPTIONS_WITH_VALUE = ("-c", "-C")
-PUSH_OPTIONS_WITH_VALUE = ("-o", "--push-option", "--recurse-submodules", "--receive-pack", "--exec")
 # shortcut: --orphan, and git branch with -f or --track, are not checked; add them if Claude creates branches that way
 CREATE_OPTIONS = {"checkout": ("-b", "-B"), "switch": ("-c", "-C", "--create"), "worktree": ("-b", "-B")}
 # gh-pages is the branch GitHub Pages and the tools that publish to it name, not Claude.
@@ -66,7 +65,7 @@ def simple_commands(cmd):
 
 
 def new_branch_names(cmd):
-    """The names of the branches the shell command cmd creates, renames a branch to, or pushes to by a <src>:<dst> refspec."""
+    """The names of the branches the shell command cmd creates or renames a branch to."""
     try:
         commands = simple_commands(cmd)
     except ValueError:  # an unbalanced quote, such as an apostrophe in a heredoc body, leaves no words to read
@@ -75,7 +74,7 @@ def new_branch_names(cmd):
 
 
 def command_branch_names(words):
-    """The names of the branches the simple command with these words creates, renames a branch to, or pushes to by a <src>:<dst> refspec."""
+    """The names of the branches the simple command with these words creates or renames a branch to."""
     while words and (words[0] in COMMAND_PREFIXES or re.match(ENVIRONMENT_ASSIGNMENT, words[0])):
         words = words[1:]
     program = os.path.basename(words[0]) if words else ""
@@ -96,16 +95,7 @@ def command_branch_names(words):
         if "-m" in args or "-M" in args:
             return names[-1:]
         return [] if any(arg.startswith("-") for arg in args) else args[:1]
-    if subcommand == "push":
-        # The word after an option that takes a value is that value; of the other words, git takes the first as the repository, even with --repo.
-        repository_and_refspecs = [
-            arg for previous, arg in zip([None, *args], args) if not arg.startswith("-") and previous not in PUSH_OPTIONS_WITH_VALUE
-        ]
-        refspecs = [arg.partition(":") for arg in repository_and_refspecs[1:]]
-        # An empty <src> deletes <dst>, which must stay possible for a badly named branch.
-        destinations = [dst.removeprefix("refs/heads/") for src, colon, dst in refspecs if src and colon]
-        # A ref outside refs/heads/, such as a tag, is not a branch, and a pattern with * stands for many existing names.
-        return [dst for dst in destinations if not dst.startswith("refs/") and "*" not in dst]
+    # A push is left to the pre-push hook: only git sees whether the remote branch already exists, and an update of one, or a tag, must go through.
     return option_values(args, CREATE_OPTIONS.get(subcommand, ()))
 
 
@@ -147,7 +137,7 @@ def main(stdin, stdout, stderr, env_file=None):
     """Read the Claude Code hook's input from stdin and return Claude Code's exit code.
 
     At SessionStart, register this script as git's pre-push hook in env_file.
-    A Bash call that creates, renames or pushes to a branch with a name that isn't Conventional Branch gets a reason on stderr and 2, which blocks it;
+    A Bash call that creates or renames a branch with a name that isn't Conventional Branch gets a reason on stderr and 2, which blocks it;
     anything else gets 0.
     """
     hook_input = json.load(stdin)
@@ -157,11 +147,7 @@ def main(stdin, stdout, stderr, env_file=None):
     unconventional = [name for name in new_branch_names(hook_input["tool_input"]["command"]) if not conventional(name)]
     if not unconventional:
         return 0
-    print(
-        f"Blocked: branch name {', '.join(unconventional)} does not follow Conventional Branch 1.0.0. {NAMING} "
-        "To update a remote branch that already exists, push the local branch by name, without a colon; for a tag, push to refs/tags/<name>.",
-        file=stderr,
-    )
+    print(f"Blocked: branch name {', '.join(unconventional)} does not follow Conventional Branch 1.0.0. {NAMING}", file=stderr)
     return 2
 
 

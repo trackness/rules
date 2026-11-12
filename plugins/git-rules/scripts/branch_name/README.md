@@ -1,20 +1,19 @@
 # Conventional Branch names
 
-Keeps the names of the branches Claude makes to [Conventional Branch 1.0.0](https://conventionalbranch.org/v1.0.0/) with two checks: one on each Bash call, which blocks a command that gives a branch a name that does not follow it before the command runs, and one in git's `pre-push` hook, which refuses a push that would create a remote branch with such a name, whatever command made the branch.
+Keeps the names of the branches Claude makes to [Conventional Branch 1.0.0](https://conventionalbranch.org/v1.0.0/) with two checks: one on each Bash call, which blocks a command that creates or renames a branch with a name that does not follow it before the command runs, and one in git's `pre-push` hook, which refuses a push that would create a remote branch with such a name, whatever command made the branch.
 
 A name passes when it is `<type>/<description>`, with type feature, feat, bugfix, fix, hotfix, release or chore, lowercase and hyphen-separated, or when it is main, master or develop. Like the 1.0.0 rules, it allows dots only in the description of a release branch, for a version number, though the 1.0.0 grammar would allow them in any description. The rule also accepts gh-pages, which the specification does not name, because it is the branch that tools publishing to GitHub Pages, such as `mkdocs gh-deploy` and `ghp-import`, push to by default, a name Claude does not choose. Version 1.1.0 of the specification, now current, adds more types and allows dots in any description; this rule does not.
 
 ## Bash calls
 
-Blocks a Bash call that gives a branch a name that does not follow Conventional Branch 1.0.0, by creating it, renaming it or pushing to it, with a message naming the branch, such as:
+Blocks a Bash call that gives a branch a name that does not follow Conventional Branch 1.0.0, by creating it or renaming it, with a message naming the branch, such as:
 
-> Blocked: branch name Add_Login does not follow Conventional Branch 1.0.0. Use `<type>/<description>`, lowercase and hyphen-separated, with type feature, feat, bugfix, fix, hotfix, release or chore; dots are allowed only in a release version, such as release/v1.2.0. main, master, develop and gh-pages take no prefix. To update a remote branch that already exists, push the local branch by name, without a colon; for a tag, push to `refs/tags/<name>`.
+> Blocked: branch name Add_Login does not follow Conventional Branch 1.0.0. Use `<type>/<description>`, lowercase and hyphen-separated, with type feature, feat, bugfix, fix, hotfix, release or chore; dots are allowed only in a release version, such as release/v1.2.0. main, master, develop and gh-pages take no prefix.
 
 Checked:
 
 - the new branch of `git checkout -b` or `-B`, `git switch -c`, `-C` or `--create`, and `git worktree add -b` or `-B`
 - the new name of `git branch <name>` with no options, and of `git branch -m` or `-M`
-- the `<dst>` of a `git push` refspec `<src>:<dst>`, the remote branch it creates or updates, with `refs/heads/` stripped; a `<dst>` that does not start with `refs/` is taken as a branch
 - the `<name>` of `gh pr checkout <number> -b <name>` or `--branch <name>`, the local branch it creates
 - each of these after `sudo`, `env` or an environment assignment such as `GIT_TRACE=1`, with git or gh run by full path, such as `/usr/bin/git`, and, for git, after git options given as one word, such as `--git-dir=<path>`, or as `-C <path>` or `-c <setting>`
 - each of these in every command of the Bash call, such as one after `cd <dir> &&`, `;`, `|` or a newline, or in parentheses, with its redirections, such as `2>&1` or `> branches.txt`, and comments left out
@@ -23,14 +22,10 @@ Each line of a heredoc's body outside quotes, such as the message of `git commit
 
 Allowed:
 
-- `git branch -d`, and a `git push` deletion with an empty `<src>`, such as `git push origin :<name>`, so a badly named branch can still be deleted
-- a `git push` without a colon, such as `git push -u origin <name>`, because the local name was checked when the branch was made
-- a `git push` to a ref outside `refs/heads/`, such as a tag `refs/tags/v1.0.0`, or with a pattern refspec whose `<dst>` contains `*`, such as `refs/heads/*:refs/heads/*`, which stands for many existing names
-- the repository of a `git push`, even a URL with a colon such as `git@github.com:<owner>/<repo>.git`, options such as `--force-with-lease=<ref>:<expect>`, and the value of an option given as the next word, such as `-o ci.skip`, `--push-option`, `--recurse-submodules`, `--receive-pack` or `--exec`: none is read as a refspec, though the refspecs after them are still checked
+- `git branch -d`, so a badly named branch can still be deleted
+- every `git push`, even one with a `<src>:<dst>` refspec, which the `pre-push` check below judges instead, except as listed under Not checked
 - a plain `gh pr checkout <number>`, which names the local branch after the pull request's own branch, not Claude's choice
 - every other command
-
-A push this check allows still meets the `pre-push` check below, except as listed under Not checked.
 
 The check reads only the commands listed under Checked, so a branch made any other way is caught only when a push through Claude's Bash commands creates it on the remote. Such ways include:
 
@@ -46,7 +41,7 @@ The check reads only the commands listed under Checked, so a branch made any oth
 - the rest of a line after a quoted word that starts with `#`, such as `git commit -m '#12 fix' && git checkout -b <name>`, because the word is taken for the start of a comment
 - branches created other than through Bash, such as the branch Claude Code makes for an isolated worktree
 
-The name is checked when the branch is made, before it is pushed, while renaming it is still a local change. A push refspec is checked too, because it can give the remote branch a name that was never checked locally.
+The name is checked when the branch is made, before it is pushed, while renaming it is still a local change. This check does not read pushes: a push is judged by the `pre-push` check alone, which sees whether the remote branch already exists, as the command does not, so an update of an existing branch, even a badly named one, or a tag goes through.
 
 ## Pushes
 

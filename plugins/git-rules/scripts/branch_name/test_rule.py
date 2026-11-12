@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from ..git_testing import GIT_ENV, git, needs_config_hooks, needs_zsh, run_in_session
-from .rule import conventional, main, new_branch_names
+from .rule import NAMING, conventional, main, new_branch_names
 
 SCRIPT = Path(__file__).resolve().parent / "rule.py"
 
@@ -89,19 +89,6 @@ def test_conventional(name):
     pytest.param("/usr/bin/git checkout -b Add_Login", ["Add_Login"], id="git_by_full_path"),
     pytest.param("GIT_TRACE=1 git checkout -b Add_Login", ["Add_Login"], id="environment_assignment"),
     pytest.param("env GIT_TRACE=1 git checkout -b Add_Login", ["Add_Login"], id="env"),
-    pytest.param("git push origin HEAD:Add_Login", ["Add_Login"], id="push_refspec"),
-    pytest.param("git push -u origin local-name:refs/heads/Add_Login", ["Add_Login"], id="push_refspec_full_ref"),
-    pytest.param("git push origin :Add_Login", [], id="push_delete"),
-    pytest.param("git push -u origin Add_Login", [], id="push_without_colon"),
-    pytest.param("git push origin V1.0:refs/tags/V1.0", [], id="push_tag"),
-    pytest.param("git push git@github.com:trackness/rules.git HEAD:Add_Login", ["Add_Login"], id="push_to_url"),
-    pytest.param("git push --force-with-lease=feature/add-login:4f2a9c1 origin feature/add-login", [], id="push_force_with_lease"),
-    pytest.param("git push -o ci.skip git@github.com:trackness/rules.git HEAD:Add_Login", ["Add_Login"], id="push_option_short"),
-    pytest.param("git push --push-option ci.skip git@github.com:trackness/rules.git feature/add-login", [], id="push_option_long"),
-    pytest.param("git push --recurse-submodules check git@github.com:trackness/rules.git feature/add-login", [], id="push_recurse_submodules"),
-    pytest.param("git push --receive-pack /opt/git/bin/git-receive-pack git@example.com:repo.git feature/add-login", [], id="push_receive_pack"),
-    pytest.param("git push --exec /opt/git/bin/git-receive-pack git@example.com:repo.git feature/add-login", [], id="push_exec"),
-    pytest.param("git push backup 'refs/heads/*:refs/heads/*'", [], id="push_pattern"),
     pytest.param("gh pr checkout 5 -b Add_Login", ["Add_Login"], id="gh_pr_checkout_b"),
     pytest.param("gh pr checkout 5 --branch Add_Login", ["Add_Login"], id="gh_pr_checkout_branch"),
     pytest.param("gh pr checkout 5", [], id="gh_pr_checkout_own_branch"),
@@ -170,10 +157,23 @@ def test_main_allows_gh_pages_branch():
     assert main(tool_call("git checkout -b gh-pages"), io.StringIO(), io.StringIO()) == 0
 
 
+@pytest.mark.parametrize("cmd", [
+    pytest.param("git push origin HEAD:Bad_Name", id="new_branch_by_refspec"),
+    pytest.param("git push -u origin local-name:refs/heads/Add_Login", id="new_branch_by_full_ref"),
+    pytest.param("git push origin HEAD:dependabot/npm_and_yarn/lodash-4.17.21", id="existing_branch_by_refspec"),
+    pytest.param("git push origin v1.2.0:v1.2.0", id="tag_by_refspec"),
+    pytest.param("git push origin +:Add_Login", id="forced_deletion"),
+    pytest.param("git push --repo origin git@github.com:Owner/Repo.git", id="repository_after_repo_option"),
+])
+def test_main_leaves_every_push_to_the_pre_push_check(cmd):
+    """Only git sees whether the remote branch already exists, so the registered hook, tested below, judges pushes."""
+    assert main(tool_call(cmd), io.StringIO(), io.StringIO()) == 0
+
+
 def test_main_block_gives_a_reason():
     stderr = io.StringIO()
     main(tool_call("git checkout -b Add_Login"), io.StringIO(), stderr)
-    assert "Blocked: branch name Add_Login does not follow Conventional Branch 1.0.0." in stderr.getvalue()
+    assert stderr.getvalue() == f"Blocked: branch name Add_Login does not follow Conventional Branch 1.0.0. {NAMING}\n"
 
 
 def test_script_reads_its_input_as_utf_8_whatever_the_locale():
@@ -315,10 +315,12 @@ def test_ways_past_the_pre_push_check_the_readme_lists(tmp_path, command):
 
 
 @needs_config_hooks
-def test_registered_hook_allows_pushing_a_tag(tmp_path):
+@pytest.mark.parametrize("refspec", [pytest.param("V1.0", id="by_name"), pytest.param("V1.0:V1.0", id="by_refspec")])
+def test_registered_hook_allows_pushing_a_tag(tmp_path, refspec):
+    """git takes the <dst> of V1.0:V1.0 as a tag, since its <src> is one."""
     repo, remote = repo_with_remote(tmp_path)
     git("-C", repo, "tag", "V1.0")
-    assert git_in_session(tmp_path, repo, "push", "-q", "origin", "V1.0").returncode == 0
+    assert git_in_session(tmp_path, repo, "push", "-q", "origin", refspec).returncode == 0
     assert git("-C", remote, "tag").split() == ["V1.0"]
 
 
