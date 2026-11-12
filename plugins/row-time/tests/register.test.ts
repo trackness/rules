@@ -61,8 +61,7 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0, writte
   on('fs.list', ($, e) => {
     const names = Object.keys(files).filter((path) => path.startsWith(`${e.path}/`)).map((path) => path.slice(e.path.length + 1))
     if (names.length === 0) throw new Error(`ENOENT: no such file or directory, scandir '${e.path}'`)
-    // The transcripts here are ASCII, a byte to a character.
-    const entry = (name: string) => ({ name, kind: 'file' as const, size: files[`${e.path}/${name}`]?.length ?? 0, mtimeMs: 0, isLink: false })
+    const entry = (name: string) => ({ name, kind: 'file' as const, size: new TextEncoder().encode(files[`${e.path}/${name}`]).length, mtimeMs: 0, isLink: false })
     return { value: names.filter((name) => !name.includes('/')).map(entry) }
   })
   on('process.run', ($, e) => {
@@ -74,9 +73,12 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0, writte
     if (command !== 'sh' || flag !== '-c' || script !== READ_ON || text === undefined) {
       return { value: { exitCode: 1, stdout: '', stderr: `${String(command)}: ${String(path)}: No such file or directory\n`, isStdoutTruncated: false, isStderrTruncated: false } }
     }
-    // The transcripts here are ASCII, a byte to a character.
-    const stdout = text.slice(Number(from) - 1, Number(from) - 1 + STDOUT_LIMIT + 1)
-    return { value: { exitCode: 0, stdout: stdout.slice(0, STDOUT_LIMIT), stderr: '', isStdoutTruncated: stdout.length > STDOUT_LIMIT, isStderrTruncated: false } }
+    const bytes = new TextEncoder().encode(text).subarray(Number(from) - 1, Number(from) - 1 + STDOUT_LIMIT + 1)
+    // A cut inside a character of more than one byte drops that character: the cut steps back past its other bytes.
+    let end = Math.min(bytes.length, STDOUT_LIMIT)
+    while (end < bytes.length && ((bytes[end] ?? 0) & 0xc0) === 0x80) end -= 1
+    const stdout = new TextDecoder().decode(bytes.subarray(0, end))
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: bytes.length > STDOUT_LIMIT, isStderrTruncated: false } }
   })
   return ran
 }
@@ -469,6 +471,21 @@ test('a row the transcript lacked when first drawn is looked for, when drawn aga
   const shown = (await ui.find({ type: 'Text' }))?.text
   // A read that starts at a byte goes straight to it: one that starts at a line counts through every line before.
   const fromTheCall = ['sh', '-c', READ_ON, 'sh', String(BEFORE_THE_CALL.length + 1), TRANSCRIPT]
+  expect({ shown, ran: ran.slice(ranForFirstDraw) }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [fromTheCall] })
+})
+
+test('a read starts at the byte after those already read, where the lines before hold characters of more than one byte', async ($, on) => {
+  const clock = mock.clock(on)
+  // A prompt whose dashes, quotes and tick take two or three bytes each in UTF-8.
+  const before = transcript(user('e0a040a6-aec9-4274-97fb-1f81430a0f1a', '2026-11-10T09:28:40.249Z', 'Lade den Skill — «plugin-authoring» ✓'))
+  const files = { [TRANSCRIPT]: before }
+  const ran = host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  const ranForFirstDraw = ran.length
+  await recordSkillCall($, clock, files)
+  const shown = (await ui.find({ type: 'Text' }))?.text
+  const fromTheCall = ['sh', '-c', READ_ON, 'sh', String(new TextEncoder().encode(before).length + 1), TRANSCRIPT]
   expect({ shown, ran: ran.slice(ranForFirstDraw) }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [fromTheCall] })
 })
 
