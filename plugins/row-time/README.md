@@ -55,7 +55,7 @@ The time of each row drawn is kept in a file beside the transcript, under the tr
 
 ## How it reads the transcript
 
-The mod hooks `classic.SessionStart` for the transcript's path, which it holds in the session's state, `session.start` to take that path up again after a reload, `session.append` to draw the rows again, and `ui.render` to draw each row. It reads a transcript with `tail`, piped through `head` by `sh`, because a mod's own file read refuses a file over 4 MiB, which a transcript passes; so it needs `sh`, `tail` and `head` on the `PATH`. A subagent's transcript is looked for in the `subagents` folder that Claude Code keeps beside the session's transcript, under the session's id, and read on only once the folder's listing shows it has grown past what was read of it.
+The mod hooks `classic.SessionStart` for the transcript's path, which it holds in the session's state, `session.start` to take that path up again after a reload, `session.append` to draw the rows again, and `ui.render` to draw each row. It reads a transcript with `tail`, piped through `head` by `sh`, because a mod's own file read refuses a file over 4 MiB, which a transcript passes. A subagent's transcript is looked for in the `subagents` folder that Claude Code keeps beside the session's transcript, under the session's id, and read on only once the folder's listing shows it has grown past what was read of it.
 
 In one load of the mod, each line of a transcript is read once, however long the transcript grows; a reload of the mod reads it again from the start:
 
@@ -67,7 +67,7 @@ In one load of the mod, each line of a transcript is read once, however long the
 
 ## Future improvements
 
-Built and run against Claude Code 2.1.322. What the mod does not yet do right:
+What the mod does not yet do right:
 
 - **A reply in the ctrl+o view.** Claude Code draws its own time and model on a line above each reply there, in place of the blank line it draws in the normal view, and tells a mod nothing of it, so the mod's time is painted over the start of that line, hiding as many of its columns as the time and the space after it take. Claude Code's code draws the same line above a reply in the normal view while its `showMessageTimestamps` setting is on. A fullscreen session without `--verbose` shows it.
 - **A run of tool calls drawn unfolded.** Under `--verbose`, and in the ctrl+o view of the non-fullscreen screen, Claude Code draws a run's calls as rows of their own inside the run. The run and its first call then each carry the same time, each at the left of its own top line, so the time shows twice, and each call in the run takes a line more than Claude Code draws, for the blank line the mod adds above it. A fullscreen session without `--verbose` does not show it.
@@ -77,7 +77,7 @@ Built and run against Claude Code 2.1.322. What the mod does not yet do right:
 
 ## Requirements
 
-The mod is a TypeScript hooks module that Claude Code runs itself, built and tested against Claude Code 2.1.322; mods are early access, and their API can change between releases. Claude Code doesn't load the module while its rollout flag for installed plugins' hooks modules is off; until the workspace is trusted, it runs none of the plugin's hooks.
+Claude Code 2.1.322 or later, on macOS or Linux, whose `sh`, `tail` and `head` the mod runs. The mod is a TypeScript hooks module that Claude Code runs itself, built and tested against Claude Code 2.1.322; the mods API can change between releases. Claude Code doesn't load the module while its rollout switch for installed plugins' hooks modules is off; until the workspace is trusted, it runs none of the plugin's hooks.
 
 ## Install
 
