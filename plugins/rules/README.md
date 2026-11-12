@@ -6,7 +6,7 @@ A Claude Code plugin of hooks that enforce rules on how Claude uses its tools. E
 
 | Rule | Hook |
 |---|---|
-| [One command per Bash call](scripts/one_command/README.md) | `PreToolUse` on `Bash` |
+| [One command per Bash call](scripts/one_command/README.md) | `PreToolUse` on `Bash`, which also runs on Monitor commands |
 | [Write only for new files](scripts/new_files_only/README.md) | `PreToolUse` on `Write` |
 | [No hard-wrapped Markdown](scripts/no_hard_wrap/README.md) | `PreToolUse` on `Write` and `Edit` |
 

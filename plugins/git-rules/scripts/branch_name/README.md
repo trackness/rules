@@ -8,7 +8,7 @@ A name passes when it is `<type>/<description>`, with type feature, feat, bugfix
 
 Blocks a Bash call that gives a branch a name that does not follow Conventional Branch 1.0.0, by creating it, renaming it or pushing to it, with a message naming the branch, such as:
 
-> Blocked: branch name Add_Login does not follow Conventional Branch 1.0.0. Use `<type>/<description>`, lowercase and hyphen-separated, with type feature, feat, bugfix, fix, hotfix, release or chore; dots are allowed only in a release version, such as release/v1.2.0. main, master, develop and gh-pages take no prefix.
+> Blocked: branch name Add_Login does not follow Conventional Branch 1.0.0. Use `<type>/<description>`, lowercase and hyphen-separated, with type feature, feat, bugfix, fix, hotfix, release or chore; dots are allowed only in a release version, such as release/v1.2.0. main, master, develop and gh-pages take no prefix. To update a remote branch that already exists, push the local branch by name, without a colon; for a tag, push to `refs/tags/<name>`.
 
 Checked:
 

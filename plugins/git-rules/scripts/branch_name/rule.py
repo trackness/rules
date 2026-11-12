@@ -157,7 +157,11 @@ def main(stdin, stdout, stderr, env_file=None):
     unconventional = [name for name in new_branch_names(hook_input["tool_input"]["command"]) if not conventional(name)]
     if not unconventional:
         return 0
-    print(f"Blocked: branch name {', '.join(unconventional)} does not follow Conventional Branch 1.0.0. {NAMING}", file=stderr)
+    print(
+        f"Blocked: branch name {', '.join(unconventional)} does not follow Conventional Branch 1.0.0. {NAMING} "
+        "To update a remote branch that already exists, push the local branch by name, without a colon; for a tag, push to refs/tags/<name>.",
+        file=stderr,
+    )
     return 2
 
 

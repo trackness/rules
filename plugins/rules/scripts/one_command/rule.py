@@ -50,6 +50,7 @@ def chains(cmd):
     if any(chains(c) for heredoc in re.finditer(HEREDOC, cmd, flags=re.S) if not heredoc["quote"] for c in substituted_commands(heredoc["body"])):
         return True
     # Any other heredoc body is input to its command, not commands; strip() drops the newline a heredoc leaves before a closing ")".
+    # shortcut: a << inside quotes, as in echo '<<EOF', is read as a heredoc too, so the lines after it up to a line EOF go unchecked; skip quoted text first if Claude writes that.
     cmd = re.sub(HEREDOC, r"\g<rest_of_line>", cmd, flags=re.S).strip()
     if any(chains(run_string["quoted"][1:-1]) for run_string in re.finditer(RUN_STRING, cmd, flags=re.S)):
         return True
@@ -70,7 +71,7 @@ def main(stdin, stderr):
     if not chains(json.load(stdin)["tool_input"]["command"]):
         return 0
     print(
-        "Blocked: one command per Bash call. Find a single command or tool that does the whole job. "
+        "Blocked: one command per Bash or Monitor call. Find a single command or tool that does the whole job. "
         "Only if there isn't one, send the commands as separate calls.",
         file=stderr,
     )

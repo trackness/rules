@@ -83,7 +83,7 @@ def main(stdin, stderr):
         return 0
     print(
         "Blocked: hard-wrapped Markdown. Write each paragraph and list item as one line; "
-        "break lines only between blocks, list items and table rows, and inside code blocks.",
+        "break lines only between blocks, list items and table rows that start with a pipe character, and inside code blocks.",
         file=stderr,
     )
     return 2
