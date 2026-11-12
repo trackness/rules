@@ -1,6 +1,6 @@
 ---
 name: code
-description: Exhaustive read-only code audit for bugs, security, tests, performance, and unnecessary code. Reads every line in scope, independently verifies findings, and checks for omissions. Use when explicitly asked for exhaustive coverage, rather than an architecture-focused review.
+description: Exhaustive read-only code audit for bugs, security, tests, performance, and unnecessary code. Reads every line in scope, independently verifies findings, and checks for omissions. Leaves every finding in an untracked AUDIT-FINDINGS.md at the repo root, which /audit:code-fix starts from. Use when explicitly asked for exhaustive coverage, rather than an architecture-focused review.
 disable-model-invocation: true
 ---
 
@@ -24,7 +24,13 @@ Use the `Agent` tool to create subagents for this workflow:
 
 - first, split the files in scope into areas small enough for one auditor to read in full, and show me the split
 - one auditor per area, each reading its area in full and returning every file and line range it read
-- one verifier per finding, which opens the cited lines and quotes them; drop any finding it cannot confirm
-- one fresh auditor that gets the reading lists and the findings and looks only for what they missed
+- one verifier per finding, told to refute it, which opens the cited lines and quotes them, reproduces the case against the real code, tests the proposed fix and corrects it, and gives a verdict (confirmed, partly, not confirmed) and a severity; drop any finding it cannot confirm, and record the verifier's fix, not the auditor's
+- one fresh auditor that gets the reading lists, the findings and the leads the verifiers raised, and looks only for what they missed; each finding it adds gets its own verifier
+
+Name a model on every spawn, chosen by how hard its task is: verifiers and the gap auditor can run on a cheaper one than yours. Run at most 20 agents at once, launching the next as one finishes. Put what you pass to every agent in one brief file in the scratchpad folder, so each prompt carries only its area or finding, and add these rules to it: never print the environment; never run a test suite with `GIT_DIR` set; start no live interactive session; read no old session files; write scratch files only in the scratchpad folder; a block from an installed hook is evidence, not something to work around.
+
+After each launch and each report, give me a short status with a table of every agent's state: ✅ done, 🚧 running, 📬 finished but report pending, 🔁 sent back, ⚠️ problem. Say plainly what went wrong, what you decided for me and why, what was left out, and the risk to know.
 
 Not checked must list every line range nobody read.
+
+Besides the report, write `AUDIT-FINDINGS.md` at the repo root, untracked and never committed: the one file the audit writes, and the handoff to `/audit:code-fix`, so it must stand alone. It holds a legend, the findings table, then fix notes with the exact patterns. The table's columns are #, ID (the auditor's), Sev, State, Grp, Where, Problem and Fix in short, one row per finding, dropped and not-counted ones included. Severity: 🔴 must fix, 🟠 should fix, 🟡 nice to have. State: 🛠️ assigned, ⏸️ parked, ❌ dropped (refuted), ➖ not counted, ✅ fixed. No cell holds a pipe character: a pattern with one goes in the fix notes, in a `~~~` fence.

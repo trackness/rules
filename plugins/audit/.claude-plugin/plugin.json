@@ -1,6 +1,6 @@
 {
   "name": "audit",
-  "description": "Skills that audit a codebase with subagents: an exhaustive code audit and a review of its architecture and patterns.",
+  "description": "Skills that audit a codebase with subagents: an exhaustive code audit, a fix run for its findings, and a review of its architecture and patterns.",
   "author": { "name": "trackness" },
   "license": "MIT"
 }
