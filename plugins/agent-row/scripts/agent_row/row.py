@@ -48,9 +48,10 @@ def token_count(count):
     """The count of tokens as Claude Code writes it: 850, 12.3k or 1.2m."""
     if count < 1000:
         return str(count)
-    if count < 1_000_000:
-        return f"{count / 1000:.1f}k"
-    return f"{count / 1_000_000:.1f}m"
+    # Whole-number rounding, half up, as Claude Code does; 999,950 and above round up to 1.0m.
+    if count < 999_950:
+        return f"{(count + 50) // 100 / 10:.1f}k"
+    return f"{(count + 50_000) // 100_000 / 10:.1f}m"
 
 
 def display_width(text):

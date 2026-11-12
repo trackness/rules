@@ -190,6 +190,9 @@ def test_no_token_count_while_it_is_zero():
 @pytest.mark.parametrize("count, written", [
     pytest.param(850, "850", id="under_a_thousand"),
     pytest.param(1_234_567, "1.2m", id="millions"),
+    pytest.param(12_350, "12.4k", id="half_rounds_up"),
+    pytest.param(999_949, "999.9k", id="last_thousands"),
+    pytest.param(999_950, "1.0m", id="rounds_up_into_millions"),
 ])
 def test_token_count(count, written):
     assert token_count(count) == written
