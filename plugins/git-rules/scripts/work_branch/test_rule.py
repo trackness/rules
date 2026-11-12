@@ -75,6 +75,11 @@ def test_a_repository_on_develop_is_off_a_work_branch(tmp_path):
     assert off_a_work_branch(repo_on(tmp_path, "develop")) == "on develop"
 
 
+def test_a_repository_on_main_in_another_case_is_off_a_work_branch(tmp_path):
+    """On a case-insensitive disk, such as macOS's by default, git checkout MAIN checks out main but names the branch MAIN."""
+    assert off_a_work_branch(repo_on(tmp_path, "MAIN")) == "on MAIN"
+
+
 def test_a_repository_on_a_detached_head_is_off_a_work_branch(tmp_path):
     repo = repo_on(tmp_path, "feature/add-login")
     git("-C", repo, "switch", "-q", "--detach")

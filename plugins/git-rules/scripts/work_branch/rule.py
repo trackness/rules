@@ -29,7 +29,7 @@ def off_a_work_branch(directory):
         # git detaches HEAD while it rebases a branch, and keeps the rebase's state in one of these two directories.
         rebase_state = git(directory, "rev-parse", "--path-format=absolute", "--git-path", "rebase-merge", "--git-path", "rebase-apply").stdout.splitlines()
         return None if any(Path(path).is_dir() for path in rebase_state) else "on a detached HEAD"
-    if branch not in SHARED_BRANCHES:
+    if branch.lower() not in SHARED_BRANCHES:  # on a case-insensitive disk, git checkout MAIN checks out main as MAIN
         return None
     # git switch -c refuses to run in a merge, cherry-pick or revert stopped at a conflict, which keeps its state in one of these files.
     stopped = git(

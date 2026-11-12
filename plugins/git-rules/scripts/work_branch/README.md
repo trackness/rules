@@ -2,7 +2,7 @@
 
 Keeps Claude's work on a branch with two checks: one on each Edit, Write and NotebookEdit call, which blocks a change to a file whose repository is not on a work branch before the change is made, and one in git's `pre-commit` hook, which rejects a commit made there.
 
-A repository is on a work branch when the branch checked out has any name but main, master or develop. A detached HEAD is on no branch, so it is not on a work branch either. Three states are let through:
+A repository is on a work branch when the branch checked out has any name but main, master or develop, in any case, such as MAIN. A detached HEAD is on no branch, so it is not on a work branch either. Three states are let through:
 
 - a repository with no commits yet, which has no main to branch from, so its first commit is made on main
 - a rebase in progress, with or without `--apply`, during which git detaches HEAD, so that a conflict can still be resolved and the rebase continued
