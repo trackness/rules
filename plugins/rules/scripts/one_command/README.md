@@ -23,4 +23,5 @@ Not checked:
 
 - inside a `$(…)`, brackets nested more than two deep, after which the rest of that `$(…)` is read as text
 - a quoted command that a program other than a shell, `eval` or `ssh` runs, such as `watch 'a; b'`, `git rebase -x 'a && b'`, `git submodule foreach 'a; b'` or `tmux new 'a; b'`
+- what the escapes in a `$'…'` string stand for, such as the line break of `\n`, which are read as written, so `bash -c $'a\nb'` passes
 - the lines after a `<<` inside quotes, such as `echo '<<EOF'`, up to a line holding only the word after it, which are read as a heredoc's body

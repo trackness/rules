@@ -4,7 +4,8 @@ import json
 import re
 import sys
 
-SINGLE_QUOTED = r"'[^']*'"
+# A $'...' string ends at the first quote that no backslash escapes; a plain '...' string at the next quote.
+SINGLE_QUOTED = r"\$'(?:\\.|[^'\\])*'|'[^']*'"
 # A ")" that is quoted, escaped or closes a "(" does not end a $(...). Each of those starts with a character that plain text excludes,
 # so each character has one reading and a long unclosed string cannot backtrack exponentially.
 ESCAPED_OR_QUOTED = r'''\\.|'[^']*'|"[^"]*"'''
@@ -56,10 +57,10 @@ def chains(cmd):
     # Any other heredoc body is input to its command, not commands; strip() drops the newline a heredoc leaves before a closing ")".
     # shortcut: a << inside quotes, as in echo '<<EOF', is read as a heredoc too, so the lines after it up to a line EOF go unchecked; skip quoted text first if Claude writes that.
     cmd = re.sub(HEREDOC, r"\g<rest_of_line>", cmd, flags=re.S).strip()
-    if any(chains(run_string["quoted"][1:-1]) for run_string in re.finditer(RUN_STRING, cmd, flags=re.S)):
+    if any(chains(run_string["quoted"].removeprefix("$")[1:-1]) for run_string in re.finditer(RUN_STRING, cmd, flags=re.S)):
         return True
     matches = [match[0] for match in re.finditer(QUOTED_OR_ESCAPED, cmd, flags=re.S)]
-    quoted = [m for m in matches if m[0] in "'\""]
+    quoted = [m.removeprefix("$") for m in matches if m[0] in "'\"$"]
     outside_quotes = re.sub(QUOTED_OR_ESCAPED, "", cmd, flags=re.S)
     reread = re.match(REREAD, cmd)
     if reread and any(m in ("\\;", "\\|", "\\&") for m in matches):
