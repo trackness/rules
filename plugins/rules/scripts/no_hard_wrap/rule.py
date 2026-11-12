@@ -25,8 +25,9 @@ def hard_wraps(text):
     fence_indent = 0  # how far the line that opened that code block is indented
     continuable = False  # whether the previous line is text that the current line could continue
     lines = text.split("\n")
-    # front matter opens the file with a --- line and needs a closing one; without it, the first line is a rule line
-    front_matter = lines[0].rstrip("\r") == "---" and "---" in (line.rstrip("\r") for line in lines[1:])
+    # front matter, YAML between --- lines or TOML between +++ lines, opens the file and needs its closing line; without it, a --- first line is a rule line
+    delimiter = lines[0].rstrip("\r")
+    front_matter = delimiter in ("---", "+++") and delimiter in (line.rstrip("\r") for line in lines[1:])
     comment = False  # whether the current line is inside an HTML comment that an earlier line opened
     was_blank, indented_code = True, False
     for number, line in enumerate(lines):
@@ -36,7 +37,7 @@ def hard_wraps(text):
         indented_code = not blank and line.startswith(("    ", "\t")) and (was_blank or indented_code)
         was_blank = blank
         if front_matter:
-            front_matter = number == 0 or line.rstrip("\r") != "---"
+            front_matter = number == 0 or line.rstrip("\r") != delimiter
             continuable = False
         elif not fence and (comment or re.match(r" {0,3}<!--", line)):
             # as in CommonMark, a comment block starts at a line that begins with <!-- and ends at the first line holding -->
