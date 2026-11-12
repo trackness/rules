@@ -70,12 +70,26 @@ function keptTimes(text: string): Map<string, string> {
  * The transcripts a session's rows are recorded in that may hold lines not yet read: the session's own, then those of
  * its subagents that have grown since they were last read, which Claude Code keeps in the session's folder beside it.
  */
-async function transcriptsOf($: EngineInterface, transcript: string, { bytesRead }: Reading): Promise<string[]> {
-  const subagents = transcript.replace(/\.jsonl$/, '/subagents')
-  const theirs = await $.fs.list(subagents).catch(() => [])
-  // A listing gives a link the size 0, whatever it leads to, so a link is read on each time.
-  const grown = theirs.filter((entry) => entry.name.endsWith('.jsonl') && (entry.isLink || entry.size > (bytesRead.get(`${subagents}/${entry.name}`) ?? 0)))
-  return [transcript, ...grown.map((entry) => `${subagents}/${entry.name}`)]
+async function transcriptsOf($: EngineInterface, transcript: string, reading: Reading): Promise<string[]> {
+  return [transcript, ...(await grownIn($, transcript.replace(/\.jsonl$/, '/subagents'), reading))]
+}
+
+/**
+ * The subagents' transcripts in a folder, and in the folders within it, such as the one a workflow run keeps its
+ * agents' in, that have grown since they were last read.
+ */
+async function grownIn($: EngineInterface, folder: string, reading: Reading): Promise<string[]> {
+  const entries = await $.fs.list(folder).catch(() => [])
+  const grown = await Promise.all(
+    entries.map(async ({ name, kind, size, isLink }) => {
+      const path = `${folder}/${name}`
+      if (kind === 'dir') return grownIn($, path, reading)
+      // A listing gives a link the size 0, whatever it leads to, so a link is read on each time, and never walked into.
+      const hasGrown = isLink || size > (reading.bytesRead.get(path) ?? 0)
+      return name.startsWith('agent-') && name.endsWith('.jsonl') && hasGrown ? [path] : []
+    }),
+  )
+  return grown.flat()
 }
 
 /** What has been read of a session's transcripts so far. */

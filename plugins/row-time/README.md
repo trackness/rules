@@ -55,7 +55,7 @@ The time of each row drawn is kept in a file beside the transcript, under the tr
 
 ## How it reads the transcript
 
-The mod hooks `classic.SessionStart` for the transcript's path, which it holds in the session's state, `session.start` to take that path up again after a reload, `session.append` to draw the rows again, and `ui.render` to draw each row. It reads a transcript with `tail`, piped through `head` by `sh`, because a mod's own file read refuses a file over 4 MiB, which a transcript passes. A subagent's transcript is looked for in the `subagents` folder that Claude Code keeps beside the session's transcript, under the session's id, and read on only once the folder's listing shows it has grown past what was read of it.
+The mod hooks `classic.SessionStart` for the transcript's path, which it holds in the session's state, `session.start` to take that path up again after a reload, `session.append` to draw the rows again, and `ui.render` to draw each row. It reads a transcript with `tail`, piped through `head` by `sh`, because a mod's own file read refuses a file over 4 MiB, which a transcript passes. A subagent's transcript, named `agent-` then the agent's id and `.jsonl`, is looked for in the `subagents` folder that Claude Code keeps beside the session's transcript, under the session's id, and in the folders within it, such as the one a workflow run keeps its agents' transcripts in, and read on only once its folder's listing shows it has grown past what was read of it.
 
 In one load of the mod, each line of a transcript is read once, however long the transcript grows; a reload of the mod reads it again from the start:
 

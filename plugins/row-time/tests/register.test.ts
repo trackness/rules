@@ -62,7 +62,10 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0, writte
     const names = Object.keys(files).filter((path) => path.startsWith(`${e.path}/`)).map((path) => path.slice(e.path.length + 1))
     if (names.length === 0) throw new Error(`ENOENT: no such file or directory, scandir '${e.path}'`)
     const entry = (name: string) => ({ name, kind: 'file' as const, size: new TextEncoder().encode(files[`${e.path}/${name}`]).length, mtimeMs: 0, isLink: false })
-    return { value: names.filter((name) => !name.includes('/')).map(entry) }
+    // A folder within this one, which a listing gives the size 0.
+    const folders = new Set(names.filter((name) => name.includes('/')).map((name) => name.slice(0, name.indexOf('/'))))
+    const folder = (name: string) => ({ name, kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false })
+    return { value: [...names.filter((name) => !name.includes('/')).map(entry), ...[...folders].map(folder)] }
   })
   on('process.run', ($, e) => {
     ran.push(e.argv)
@@ -326,6 +329,23 @@ test('a row of a subagent shows the time the subagent\'s own transcript records 
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolUse', requestId: listing.tool_use_id, props: listing })
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T10:02:05.310Z')} `)
+})
+
+test('a row of an agent a workflow runs shows the time its own transcript records, in a folder within the subagents folder, and the run\'s journal is never read', async ($, on) => {
+  // Claude Code keeps the transcripts of a workflow run's agents in a folder of the run's own, beside the run's journal.
+  const run = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a/subagents/workflows/wf_e86dd8ff-bb3'
+  const agent = `${run}/agent-abe28368165282cec.jsonl`
+  const listing = { tool_use_id: 'toolu_01Wq4mRt7YbN2cXp9LsKd3Fe', tool: 'Bash', input: { command: 'ls' }, isRunning: false, isErrored: false, isInterrupted: false, isExpanded: false }
+  const ran = host(on, {
+    [TRANSCRIPT]: SKILL_SESSION,
+    // Listed before the agent's transcript, so a read of it would come first.
+    [`${run}/journal.jsonl`]: transcript({ type: 'launched' }, { type: 'started', agentId: 'abe28368165282cec', label: 'List the files' }),
+    [agent]: transcript(assistant('3c9e1f47-8a2d-4b6e-a5f0-7d1c2b9e4a68', '2026-11-10T10:02:05.310Z', { type: 'tool_use', id: listing.tool_use_id, name: 'Bash', input: listing.input })),
+  })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolUse', requestId: listing.tool_use_id, props: listing })
+  // The file a read is of is the last word of its command.
+  expect({ shown: (await ui.find({ type: 'Text' }))?.text, read: ran.map((argv) => argv.at(-1)) }).toEqual({ shown: `${timeOfDay('2026-11-10T10:02:05.310Z')} `, read: [TRANSCRIPT, agent] })
 })
 
 test('a row no transcript holds yet is looked for, when drawn again, only in the transcripts that have grown, and never in a subagent\'s meta file', async ($, on) => {
