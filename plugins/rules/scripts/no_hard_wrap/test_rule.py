@@ -32,6 +32,9 @@ def edit_call(file_path, old_string, new_string, replace_all=False):
     pytest.param("<!-- a note -->\nThis paragraph runs on\nto a second line.\n", id="paragraph_runs_on_after_one_line_html_comment"),
     pytest.param("This paragraph runs on\n    to an indented second line\n    and a third.\n", id="paragraph_runs_on_to_indented_lines"),
     pytest.param("- Run:\n\n     ```sh\n     uv sync\n     ```\n\n  Then the tests\n  run on their own.\n", id="paragraph_runs_on_after_fence_closed_at_its_own_indent"),
+    pytest.param("This paragraph runs on\n*emphasis* first.\n", id="paragraph_runs_on_to_a_line_starting_with_emphasis"),
+    pytest.param("The water cooled to\n-5 degrees overnight.\n", id="paragraph_runs_on_to_a_line_starting_with_a_negative_number"),
+    pytest.param("The build got faster by\n1.5 times this week.\n", id="paragraph_runs_on_to_a_line_starting_with_a_decimal"),
 ])
 def test_hard_wraps(text):
     assert hard_wraps(text)
@@ -44,6 +47,8 @@ def test_hard_wraps(text):
     pytest.param("1) First step.\n2) Second step.\n", id="parenthesis_numbered_list_items"),
     pytest.param("* one item\n* another item\n", id="asterisk_list_items"),
     pytest.param("+ one item\n+ another item\n", id="plus_list_items"),
+    pytest.param("Steps:\n-\tone item\n1)\tanother item\n", id="list_items_with_a_tab_after_the_mark"),
+    pytest.param("1. First step.\n2.\n-\n3. Third step.\n", id="empty_list_items"),
     pytest.param("## Install\nRun the installer.\n", id="paragraph_right_under_heading"),
     pytest.param("Run the installer.\n## Usage\n", id="heading_right_under_paragraph"),
     pytest.param("Title\n=====\n\nUsage\n-----\nRun the installer.\n", id="underlined_headings"),

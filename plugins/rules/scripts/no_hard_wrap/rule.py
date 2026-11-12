@@ -5,7 +5,7 @@ import re
 import sys
 from pathlib import Path
 
-LIST_ITEM = r"\s*(?:[-*+]|\d+[.)]) "
+LIST_ITEM = r"\s*(?:[-*+]|\d+[.)])(?:\s|$)"
 OTHER_BLOCK = r"\s*(?:#{1,6} |[|<>]|\[[^\]]+\]:|=+\s*$|(?:-\s*){3,}$|(?:\*\s*){3,}$|(?:_\s*){3,}$)"
 FENCE = r"\s*(`{3,}|~{3,})"
 STRAIGHT_QUOTES = str.maketrans("‘’“”", "''\"\"")
