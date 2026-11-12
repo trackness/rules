@@ -18,7 +18,8 @@ DOUBLE_QUOTED = rf'''"(?:\\.|\$\({DOLLAR_PAREN_BODY}\)|\$(?!\()|[^"\\$])*"'''
 COMMENT = r"(?:^|(?<=\s))#[^\n`]*"
 QUOTED_OR_ESCAPED = rf"\\.|{SINGLE_QUOTED}|{DOUBLE_QUOTED}|{COMMENT}"
 SUBSTITUTION = rf"\$\((?P<dollar>{DOLLAR_PAREN_BODY})\)|`(?P<backtick>[^`]*)`"
-HEREDOC = r"<<-?\s*(?P<quote>['\"]?)(?P<delimiter>\w+)(?P=quote)(?P<rest_of_line>[^\n]*)\n(?P<body>.*?)\n[ \t]*(?P=delimiter)[ \t]*(?=\n|$)"
+# A backslash before the delimiter quotes it as quote marks around it do; the body, with its last line break, may be empty.
+HEREDOC = r"<<-?\s*(?P<quote>\\?(?P<mark>['\"]?))(?P<delimiter>[\w.-]+)(?P=mark)(?P<rest_of_line>[^\n]*)\n(?P<body>(?:.*?\n)??)[ \t]*(?P=delimiter)[ \t]*(?=\n|$)"
 # A shell, or ssh, as a whole word anywhere (after sudo or env too), with or without its path: it runs a heredoc or here-string as a script.
 SHELL = r"(?:^|\s)(?:\S*/)?(?:ba|z|da|k|c|tc|fi|s)?sh(?=[\s<])"
 HEREDOC_FED_TO_A_SHELL = rf"{SHELL}[^\n<]*{HEREDOC}"

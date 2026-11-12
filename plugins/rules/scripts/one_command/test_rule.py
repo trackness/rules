@@ -57,6 +57,8 @@ def tool_call(cmd):
     pytest.param("bash <<<'a && b'", id="in_here_string_fed_to_a_shell"),
     pytest.param("cat <<EOF > notes.txt\nBranch: $(git branch | grep '*')\nEOF", id="inside_substitution_in_unquoted_heredoc"),
     pytest.param("cat <<EOF > notes.txt\nFiles: `ls; pwd`\nEOF", id="inside_backticks_in_unquoted_heredoc"),
+    pytest.param("cat <<END-NOTES > notes.txt\nBranch: $(git branch | grep '*')\nEND-NOTES", id="inside_substitution_in_unquoted_heredoc_with_a_hyphenated_delimiter"),
+    pytest.param("bash <<'END-SCRIPT'\ncd /tmp\nls\nEND-SCRIPT", id="in_heredoc_with_a_hyphenated_delimiter_fed_to_a_shell"),
     pytest.param("ls # don't\npwd # it's done", id="newline_between_comments_holding_apostrophes"),
     pytest.param("echo $#; pwd", id="after_a_hash_that_starts_no_comment"),
     pytest.param("echo `ls # the files`; pwd", id="after_a_comment_ended_by_a_backtick"),
@@ -98,6 +100,10 @@ def test_chains(cmd):
     pytest.param("cat <&3", id="input_from_a_file_descriptor"),
     pytest.param("cat <<'EOF' > notes.txt\nBranch: $(git branch | grep '*')\nEOF", id="substitution_in_quoted_heredoc"),
     pytest.param("cat <<EOF > notes.txt\nReleased $(date +%F)\nEOF", id="substitution_in_unquoted_heredoc_running_one_command"),
+    pytest.param("cat <<'END-NOTES' > notes.txt\nfirst\nsecond\nEND-NOTES", id="heredoc_with_a_hyphen_in_its_delimiter"),
+    pytest.param("cat <<NOTES.md > notes.md\nfirst\nsecond\nNOTES.md", id="heredoc_with_a_dot_in_its_delimiter"),
+    pytest.param("cat <<\\EOF > notes.txt\nBranch: $(git branch | grep '*')\nEOF", id="substitution_in_heredoc_quoted_with_a_backslash"),
+    pytest.param("cat > empty.txt <<'EOF'\nEOF", id="heredoc_with_an_empty_body"),
     pytest.param(
         "git commit -m \"$(cat <<'EOF'\n"
         'fix(auth): handle "quoted" names; add tests\n'
