@@ -1,14 +1,14 @@
 """What the tests of the rules that git enforces share: git kept apart from the user's own config, and a Claude Code session to run it in."""
 import json
 import os
-import re
 import shutil
 import subprocess
 
 import pytest
 
-GIT_VERSION = tuple(int(part) for part in re.findall(r"\d+", subprocess.run(["git", "--version"], capture_output=True, text=True).stdout)[:3])
-needs_config_hooks = pytest.mark.skipif(GIT_VERSION < (2, 54, 0), reason="git runs hooks defined in config from 2.54.0")
+from .git_hook import MINIMUM_GIT_VERSION, git_version
+
+needs_config_hooks = pytest.mark.skipif(git_version() < MINIMUM_GIT_VERSION, reason="git runs hooks defined in config from 2.54.0")
 needs_zsh = pytest.mark.skipif(shutil.which("zsh") is None, reason="zsh is not installed")
 # The environment of every subprocess a test starts holds only PATH, so nothing of the user's, such as a secret, a GIT_DIR or a global core.hooksPath, reaches git or
 # is printed when pytest shows a failed call; git reads no config file, and commits as a test identity.

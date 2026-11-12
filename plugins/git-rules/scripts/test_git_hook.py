@@ -3,12 +3,14 @@ import io
 import json
 import os
 import shlex
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
 
 from .git_hook import register
-from .git_testing import EXISTING_GIT_CONFIG, GIT_ENV, git, needs_config_hooks, needs_zsh, run_with_env_files, start_session
+from .git_testing import BASE_ENV, EXISTING_GIT_CONFIG, GIT_ENV, git, needs_config_hooks, needs_zsh, run_with_env_files, start_session
 
 SCRIPTS = Path(__file__).resolve().parent
 # The git config each git rule's SessionStart hook adds, in order: its hook's command, then its event.
@@ -43,6 +45,27 @@ def new_repo(tmp_path):
     return repo
 
 
+def start_session_with_git(tmp_path, rule, git_script):
+    """Run the rule's SessionStart hook with only a stand-in git on the PATH, running the sh script git_script, or no git if it is None.
+
+    Return the finished hook and the env file it was given.
+    """
+    stand_ins = tmp_path / "bin"
+    stand_ins.mkdir()
+    if git_script is not None:
+        (stand_ins / "git").write_text(f"#!/bin/sh\n{git_script}\n")
+        (stand_ins / "git").chmod(0o755)
+    env_file = tmp_path / "session.env"
+    env_file.touch()  # Claude Code hands the hook an existing file to append to
+    hook_input = json.dumps({"hook_event_name": "SessionStart", "source": "startup"})
+    # Run by this Python, since the PATH holds no python3 for the script's #! line to find.
+    result = subprocess.run(
+        [sys.executable, SCRIPTS / rule / "rule.py"], input=hook_input, env={**BASE_ENV, "PATH": str(stand_ins), "CLAUDE_ENV_FILE": str(env_file)},
+        capture_output=True, text=True,
+    )
+    return result, env_file
+
+
 def test_test_subprocesses_get_a_minimal_environment(tmp_path, monkeypatch):
     """A variable of the user's, such as a secret, reaches no subprocess a test starts, where pytest would print it when the call fails."""
     monkeypatch.setenv("TEST_MARKER", "leaked")
@@ -68,6 +91,7 @@ def test_each_wired_command_is_an_executable_file_and_session_start_runs_the_reg
     assert commands["SessionStart"] == [str(SCRIPTS / rule / "rule.py") for rule in REGISTERED]
 
 
+@needs_config_hooks
 @pytest.mark.parametrize("shell", ["bash", pytest.param("zsh", marks=needs_zsh)])
 @pytest.mark.parametrize("rules", [
     pytest.param(["commit_message", "branch_name", "work_branch"], id="commit_rule_first"),
@@ -81,6 +105,32 @@ def test_the_git_rules_register_after_git_config_already_in_the_session_and_afte
         "command\ttest.kept=yes",
         *(f"command\t{entry}" for rule in rules for entry in REGISTERED[rule]),
     ]
+
+
+@pytest.mark.parametrize("rule", REGISTERED)
+@pytest.mark.parametrize(("git_script", "found"), [
+    pytest.param("echo 'git version 2.53.0'", "git 2.53.0", id="older_git"),
+    pytest.param("exit 1", "no git whose version it could read", id="git_that_fails"),
+    pytest.param(None, "no git whose version it could read", id="no_git"),
+])
+def test_session_start_without_git_2_54_registers_nothing_and_tells_claude(tmp_path, rule, git_script, found):
+    """Git runs no hook defined in config before 2.54.0, so a hook registered there would check nothing, and Claude would not know it.
+
+    Claude Code adds a SessionStart hook's stdout at exit 0 to Claude's context; Claude never sees its stderr.
+    """
+    result, env_file = start_session_with_git(tmp_path, rule, git_script)
+    assert result.returncode == 0 and env_file.read_text() == ""
+    assert len(result.stdout.splitlines()) == 1
+    assert result.stdout.endswith(f" is not active: the git-rules plugin requires git 2.54.0 or later, and found {found}.\n")
+
+
+@pytest.mark.parametrize("rule", REGISTERED)
+def test_session_start_with_a_vendor_git_2_54_registers_the_rule(tmp_path, rule):
+    """A vendor's git adds to its version, as Apple's does."""
+    result, env_file = start_session_with_git(tmp_path, rule, "echo 'git version 2.54.0 (Apple Git-157)'")
+    assert result.returncode == 0 and result.stdout == ""
+    listed = run_with_env_files([env_file], "git", "config", "--list", "--show-scope")
+    assert [line for line in listed.stdout.splitlines() if line.startswith("command\t")] == [f"command\t{entry}" for entry in REGISTERED[rule]]
 
 
 @needs_config_hooks
