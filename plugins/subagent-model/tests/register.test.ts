@@ -36,11 +36,9 @@ function engine(on: On, { files = {}, links = {}, env = { HOME: '/home/me' }, cw
   on('session.cwd', () => ({ value: cwd }))
   on('session.root', () => ({ value: root }))
   on('env.get', ($, e) => ({ value: env[e.name] }))
-  // The kit runs on POSIX and resolves a Windows path against the plugin's folder: take it back to its drive.
-  const at = (path: string) => path.replace(/^.*(?=[A-Z]:\/)/, '')
-  on('fs.exists', ($, e) => ({ value: paths.some((path) => path === at(e.path) || path.startsWith(`${at(e.path)}/`)) }))
+  on('fs.exists', ($, e) => ({ value: paths.some((path) => path === e.path || path.startsWith(`${e.path}/`)) }))
   on('fs.list', ($, e) => {
-    const dir = at(e.path)
+    const dir = e.path
     const inside = paths.filter((path) => path.startsWith(`${dir}/`))
     if (inside.length === 0) throw new Error(`ENOENT: ${e.path}`)
     const names = inside.map((path) => path.slice(dir.length + 1)).filter((name) => !name.includes('/'))
@@ -54,7 +52,7 @@ function engine(on: On, { files = {}, links = {}, env = { HOME: '/home/me' }, cw
     return { value: names.map(entry) }
   })
   on('fs.read', ($, e) => {
-    const text = disk[links[at(e.path)] ?? at(e.path)]
+    const text = disk[links[e.path] ?? e.path]
     if (text === undefined) throw new Error(`ENOENT: ${e.path}`)
     return { value: text }
   })
@@ -180,41 +178,6 @@ test('a script above the home folder is not a saved workflow', async ($, on) => 
 
 test('outside the home folder and any repository, the walk reaches the file system root', async ($, on) => {
   engine(on, { files: { '/.claude/workflows/scan.js': SCRIPT }, cwd: '/srv/scratch/notes', root: '/srv/scratch/notes' })
-  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
-  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
-})
-
-test('a Windows working directory walks up its own folders to the repository root', async ($, on) => {
-  const files = { 'C:/work/.git/HEAD': 'ref: refs/heads/main\n', 'C:/work/.claude/workflows/todo-scan.js': SCRIPT }
-  engine(on, { files, env: { OS: 'Windows_NT', USERPROFILE: 'C:\\Users\\me' }, cwd: 'C:\\work\\pkg', root: 'C:\\work' })
-  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
-  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
-})
-
-test('a Windows working directory outside a repository walks up to its drive\'s root and stops there', async ($, on) => {
-  const env = { OS: 'Windows_NT', USERPROFILE: 'C:\\Users\\me' }
-  engine(on, { files: { '/.claude/workflows/deep-research.js': RESEARCH }, env, cwd: 'C:\\scratch\\notes', root: 'C:\\scratch\\notes' })
-  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'deep-research', args: 'What changed?' })
-  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
-})
-
-test('on Windows, without HOME, the personal folder is under USERPROFILE', async ($, on) => {
-  const env = { OS: 'Windows_NT', USERPROFILE: 'C:\\Users\\me' }
-  engine(on, { files: { 'C:/Users/me/.claude/workflows/scan.js': SCRIPT }, env })
-  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
-  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
-})
-
-test('on Windows, with USERPROFILE and HOME both set, the home folder is USERPROFILE, as os.homedir() takes it', async ($, on) => {
-  const env = { OS: 'Windows_NT', HOME: 'C:\\msys\\home\\me', USERPROFILE: 'C:\\Users\\me' }
-  engine(on, { files: { 'C:/Users/me/.claude/workflows/scan.js': SCRIPT }, env })
-  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
-  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
-})
-
-test('elsewhere, with USERPROFILE and HOME both set, as under WSL, the home folder is HOME, as os.homedir() takes it', async ($, on) => {
-  const env = { HOME: '/home/me', USERPROFILE: '/mnt/c/Users/me' }
-  engine(on, { files: { '/home/me/.claude/workflows/scan.js': SCRIPT }, env })
   await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
   expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
 })

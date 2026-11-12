@@ -47,15 +47,9 @@ function metaName(script: string): string | undefined {
   return undefined
 }
 
-/** The path with / for every separator, so a Windows path walks as a POSIX one does. */
-function slashed(path: string): string {
-  return path.replace(/\\/g, '/')
-}
-
-/** The directory above dir, or dir itself at a file system root (/ or C:/). */
+/** The directory above dir, or dir itself at the file system root. */
 function parentOf(dir: string): string {
-  const parent = dir.slice(0, dir.lastIndexOf('/'))
-  return parent === '' || parent.endsWith(':') ? `${parent}/` : parent
+  return dir.slice(0, dir.lastIndexOf('/')) || '/'
 }
 
 /** The root of the git repository holding dir: the nearest directory, dir or above, that has a .git. */
@@ -69,7 +63,7 @@ async function repoRoot($: EngineInterface, dir: string): Promise<string | undef
 /** True if the repository at root is a worktree of the one at outer: its .git is a file pointing into outer's. */
 async function isWorktreeOf($: EngineInterface, root: string, outer: string): Promise<boolean> {
   // shortcut: reads the absolute gitdir git writes by default; resolve a relative one if worktree.useRelativePaths spreads.
-  return slashed(await $.fs.read(`${root}/.git`).catch(() => '')).includes(`${outer}/.git/worktrees/`)
+  return (await $.fs.read(`${root}/.git`).catch(() => '')).includes(`${outer}/.git/worktrees/`)
 }
 
 /**
@@ -81,12 +75,9 @@ async function isWorktreeOf($: EngineInterface, root: string, outer: string): Pr
  * which is .claude in the home folder unless set, and the project root if set but empty.
  */
 async function savedWorkflowFolders($: EngineInterface): Promise<string[]> {
-  // The home folder as os.homedir() takes it: USERPROFILE on Windows, HOME elsewhere, even where USERPROFILE is set (WSL).
-  const isWindows = (await $.env.get('OS')) === 'Windows_NT'
-  const homeVar = isWindows ? await $.env.get('USERPROFILE') : await $.env.get('HOME')
-  const home = homeVar === undefined ? undefined : slashed(homeVar)
-  const cwd = slashed(await $.session.cwd())
-  const projectRoot = slashed(await $.session.root())
+  const home = await $.env.get('HOME')
+  const cwd = await $.session.cwd()
+  const projectRoot = await $.session.root()
   const sessionRepo = await repoRoot($, projectRoot)
   let repo = await repoRoot($, cwd)
   if (repo !== undefined && sessionRepo !== undefined && repo.startsWith(`${sessionRepo}/`) && !(await isWorktreeOf($, repo, sessionRepo))) {
@@ -100,7 +91,7 @@ async function savedWorkflowFolders($: EngineInterface): Promise<string[]> {
   // Claude Code takes an empty CLAUDE_CONFIG_DIR as a relative path, read in the directory it runs in: the project root.
   const configVar = await $.env.get('CLAUDE_CONFIG_DIR')
   const configDir = configVar === '' ? projectRoot : (configVar ?? (home === undefined ? undefined : `${home}/.claude`))
-  if (configDir !== undefined) folders.push(`${slashed(configDir)}/workflows`)
+  if (configDir !== undefined) folders.push(`${configDir}/workflows`)
   return folders
 }
 
