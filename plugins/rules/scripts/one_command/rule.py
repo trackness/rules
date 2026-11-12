@@ -33,6 +33,9 @@ RUN_STRING = (
 # shortcut: ssh as an argument (rsync -e ssh) also gets every quoted string checked, so a quoted separator there is blocked; read ssh's own
 # arguments if that blocks real commands.
 SSH_WORD = r"(?:^|[\s/])ssh "
+# A command that starts with eval or ssh joins its arguments into one command line that a shell reads again,
+# so a separator kept from this shell by quotes or a backslash chains there.
+REREAD = r"(?:\S*/)?(?:eval|ssh) "
 # "&" chains only when another command follows it; in 2>&1 and &> it is a redirection, and a trailing "&" backgrounds a single command.
 CHAIN_OPERATOR = r"[;|\n]|(?<![<>])&(?!>|\s*$)"
 
@@ -55,10 +58,14 @@ def chains(cmd):
     cmd = re.sub(HEREDOC, r"\g<rest_of_line>", cmd, flags=re.S).strip()
     if any(chains(run_string["quoted"][1:-1]) for run_string in re.finditer(RUN_STRING, cmd, flags=re.S)):
         return True
-    quoted = [match[0] for match in re.finditer(QUOTED_OR_ESCAPED, cmd, flags=re.S) if match[0][0] in "'\""]
+    matches = [match[0] for match in re.finditer(QUOTED_OR_ESCAPED, cmd, flags=re.S)]
+    quoted = [m for m in matches if m[0] in "'\""]
     outside_quotes = re.sub(QUOTED_OR_ESCAPED, "", cmd, flags=re.S)
+    reread = re.match(REREAD, cmd)
+    if reread and any(m in ("\\;", "\\|", "\\&") for m in matches):
+        return True
     # ssh joins its arguments into one remote command, and a quoted option before the host hides that command from RUN_STRING.
-    if re.search(SSH_WORD, outside_quotes) and any(chains(q[1:-1]) for q in quoted):
+    if (reread or re.search(SSH_WORD, outside_quotes)) and any(chains(q[1:-1]) for q in quoted):
         return True
     double_quoted = [q for q in quoted if q.startswith('"')]
     return bool(re.search(CHAIN_OPERATOR, outside_quotes)) or any(chains(c) for s in double_quoted for c in substituted_commands(s))

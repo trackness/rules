@@ -15,6 +15,7 @@ Checked even though quoted, because it runs as commands:
 
 - the argument to every shell's `-c` in the command, also after other options (`bash -o pipefail -c`, `bash -lc`, `bash -c --`), and to every `eval`
 - every quoted string of a command that runs `ssh`, whose arguments become the remote command, and, since the hook does not tell them apart, of a command that only names `ssh` before other arguments, such as `rsync -e ssh` or `rg -l ssh`
+- every quoted string and every separator after a backslash in a command that starts with `eval` or `ssh`, which joins its arguments into one command line that a shell reads again, so `eval ls \; pwd` runs two commands
 - a `$(…)` or backticks inside double quotes, or in the body of an unquoted heredoc (`<<EOF`), which the shell expands
 - a heredoc or here-string (`<<<`) fed to a shell or to `ssh`, also after `sudo` or `env`
 
