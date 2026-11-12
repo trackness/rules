@@ -1,6 +1,6 @@
 # No hard-wrapped Markdown
 
-Blocks a Write or Edit to a `.md` or `.markdown` file that breaks a paragraph or list item across lines, with this message:
+Blocks a Write or Edit to a `.md` or `.markdown` file, in any letter case, that breaks a paragraph or list item across lines, with this message:
 
 > Blocked: hard-wrapped Markdown. Write each paragraph and list item as one line; break lines only between blocks, list items and table rows that start with a pipe character, and inside code blocks.
 

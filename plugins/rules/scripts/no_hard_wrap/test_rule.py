@@ -72,8 +72,9 @@ def test_main_blocks_write_of_wrapped_markdown(tmp_path):
     assert main(write_call(tmp_path / "README.md", WRAPPED), io.StringIO()) == 2
 
 
-def test_main_blocks_write_of_wrapped_markdown_with_long_extension(tmp_path):
-    assert main(write_call(tmp_path / "README.markdown", WRAPPED), io.StringIO()) == 2
+@pytest.mark.parametrize("name", ["README.markdown", "README.MD", "notes.Markdown"])
+def test_main_blocks_write_of_wrapped_markdown_whatever_the_extension_and_its_case(tmp_path, name):
+    assert main(write_call(tmp_path / name, WRAPPED), io.StringIO()) == 2
 
 
 def test_the_script_run_as_a_hook_blocks_write_of_wrapped_markdown(tmp_path):

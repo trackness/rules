@@ -60,7 +60,7 @@ def main(stdin, stderr):
     A call that hard-wraps Markdown it writes gets a reason on stderr and 2, which blocks it; anything else gets 0.
     """
     tool_input = json.load(stdin)["tool_input"]
-    if not tool_input["file_path"].endswith((".md", ".markdown")):
+    if not tool_input["file_path"].lower().endswith((".md", ".markdown")):
         return 0
     wraps_added = False  # whether an Edit adds a wrap outside its new_string, such as by turning a heading into text
     if "content" in tool_input:
