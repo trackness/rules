@@ -96,6 +96,11 @@ async function savedWorkflowFolders($: EngineInterface): Promise<string[]> {
   return folders
 }
 
+/** True if the session is in coordinator mode, as Claude Code decides it: its variable on, unless the session is interactive and local. */
+async function isCoordinator($: EngineInterface, isInteractive: boolean): Promise<boolean> {
+  return isOn(await $.env.get('CLAUDE_CODE_COORDINATOR_MODE')) && (!isInteractive || isOn(await $.env.get('CLAUDE_CODE_REMOTE')))
+}
+
 /** The size of the largest saved workflow script Claude Code 2.1.322 loads, in bytes: it skips a larger one. */
 const LARGEST_SAVED_SCRIPT_BYTES = 512 * 1024
 
@@ -114,6 +119,12 @@ async function isSavedWorkflow($: EngineInterface, name: string): Promise<boolea
 }
 
 export const register: Register = (on) => {
+  // Whether a person is at the prompt, as the session started; until it says, yes, which leaves coordinator mode off.
+  let isInteractive = true
+  on('session.start', async ($, e, next) => {
+    isInteractive = e.isInteractive
+    return next(e)
+  })
   // The ids of the Workflow calls running a script Claude could have written, which its agents' spawns carry as their
   // tool_use_id. A plugin can't call Workflow (the engine refuses it), so every call seen here is Claude's.
   // No .catch, as with the rules plugin's hooks: if a hook fails, the engine skips it and the call goes through.
@@ -132,6 +143,9 @@ export const register: Register = (on) => {
     if (e.workflow && !scripted.has(e.tool_use_id)) return next(e)
     // Where the session forces every subagent's model, Claude Code ignores the call's, so there is none to ask for.
     if (isOn(await $.env.get('CLAUDE_CODE_SUBAGENT_MODEL_FORCE'))) return next(e)
+    // Likewise an Agent call's, which Claude Code clears in coordinator mode while it forces workers onto the session's model.
+    const forcesWorkers = !e.workflow && isOn(await $.env.get('CLAUDE_CODE_COORDINATOR_FORCE_WORKER_INHERIT_MODEL'))
+    if (forcesWorkers && (await isCoordinator($, isInteractive))) return next(e)
     // Likewise a workflow agent's, while CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL names a model.
     const workflowModel = (await $.env.get('CLAUDE_CODE_WORKFLOW_SUBAGENT_MODEL'))?.trim()
     if (e.workflow && workflowModel && workflowModel.toLowerCase() !== 'inherit') return next(e)

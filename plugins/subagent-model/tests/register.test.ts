@@ -33,6 +33,7 @@ function engine(on: On, { files = {}, links = {}, env = { HOME: '/home/me' }, cw
     spawns.push(e)
     return STARTED
   })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: cwd }))
   on('session.root', () => ({ value: root }))
   on('env.get', ($, e) => ({ value: env[e.name] }))
@@ -359,6 +360,29 @@ test('CLAUDE_CODE_SUBAGENT_MODEL_FORCE set to a value Claude Code reads as off l
 
 test('CLAUDE_CODE_SUBAGENT_MODEL_FORCE is on in any case and with blanks around it, as Claude Code reads it', async ($, on) => {
   engine(on, { env: { HOME: '/home/me', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: 'TRUE ' } })
+  expect(await $.agent.spawn(SPAWN)).toEqual(STARTED)
+})
+
+// Coordinator mode, with its workers forced onto the session's model: Claude Code clears an Agent call's model.
+const COORDINATOR = { HOME: '/home/me', CLAUDE_CODE_COORDINATOR_MODE: '1', CLAUDE_CODE_COORDINATOR_FORCE_WORKER_INHERIT_MODEL: '1' }
+
+test('in coordinator mode with workers forced to inherit, an agent starts without a model, while a workflow\'s is still checked', async ($, on) => {
+  engine(on, { env: COORDINATOR })
+  await $.session.start({ cwd: '/srv/work/pkg', surface: null, isInteractive: false })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', script: SCRIPT })
+  expect(await $.agent.spawn(SPAWN)).toEqual(STARTED)
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
+})
+
+test('in an interactive local session, Claude Code keeps coordinator mode off, so an agent without a model is denied', async ($, on) => {
+  engine(on, { env: COORDINATOR })
+  await $.session.start({ cwd: '/srv/work/pkg', surface: 'terminal', isInteractive: true })
+  expect(await $.agent.spawn(SPAWN)).toEqual({ deny: AGENT_REASON })
+})
+
+test('in an interactive session with CLAUDE_CODE_REMOTE on, coordinator mode is on, so an agent starts without a model', async ($, on) => {
+  engine(on, { env: { ...COORDINATOR, CLAUDE_CODE_REMOTE: 'true' } })
+  await $.session.start({ cwd: '/srv/work/pkg', surface: 'terminal', isInteractive: true })
   expect(await $.agent.spawn(SPAWN)).toEqual(STARTED)
 })
 
