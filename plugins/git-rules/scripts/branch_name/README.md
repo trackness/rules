@@ -15,6 +15,7 @@ Checked:
 - the new branch of `git checkout -b` or `-B`, `git switch -c`, `-C`, `--create` or `--force-create`, and `git worktree add -b` or `-B`
 - the new name of `git branch <name>` with no options, and of `git branch -m` or `-M`
 - the `<name>` of `gh pr checkout <number> -b <name>` or `--branch <name>`, the local branch it creates
+- the `<name>` of `gh issue develop <number> -n <name>` or `--name <name>`, the remote branch it creates
 - each of these after `sudo`, `env` or an environment assignment such as `GIT_TRACE=1`, with git or gh run by full path, such as `/usr/bin/git`, and, for git, after git options given as one word, such as `--git-dir=<path>`, or as `-C <path>` or `-c <setting>`
 - each of these in every command of the Bash call, such as one after `cd <dir> &&`, `;`, `|` or a newline, or in parentheses, with its redirections, such as `2>&1` or `> branches.txt`, and comments left out
 
@@ -65,5 +66,6 @@ The hook checks the name the branch would have on the remote, not the command, s
 ## Not checked
 
 - a local branch made in a way the Bash check does not read, until a push creates it on the remote, and never if it is never pushed
+- a remote branch made without a push, such as with `gh api` or with `gh issue develop` without `--name`, which names it after the issue
 - `git push --no-verify`, which skips the `pre-push` hook, and `git send-pack`, which runs no `pre-push` hook
 - what none of the plugin's [git hooks](../../README.md#git-hooks) checks, such as a push run with `-c hook.conventional-branch.enabled=false`
