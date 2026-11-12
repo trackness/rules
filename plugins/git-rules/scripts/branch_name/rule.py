@@ -19,7 +19,7 @@ OPERATOR_CHARACTERS = "();<>|&\n"
 REDIRECTION = r"&?[<>]+[&|]?"
 GIT_OPTIONS_WITH_VALUE = ("-c", "-C")
 # shortcut: --orphan, and git branch with -f or --track, are not checked; add them if Claude creates branches that way
-CREATE_OPTIONS = {"checkout": ("-b", "-B"), "switch": ("-c", "-C", "--create"), "worktree": ("-b", "-B")}
+CREATE_OPTIONS = {"checkout": ("-b", "-B"), "switch": ("-c", "-C", "--create", "--force-create"), "worktree": ("-b", "-B")}
 # gh-pages is the branch GitHub Pages and the tools that publish to it name, not Claude.
 CONVENTIONAL = r"main|master|develop|gh-pages|(?:feature|feat|bugfix|fix|hotfix|chore)/[a-z0-9]+(?:-[a-z0-9]+)*|release/[a-z0-9]+(?:[-.][a-z0-9]+)*"
 NAMING = (

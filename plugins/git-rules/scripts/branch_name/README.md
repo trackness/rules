@@ -12,7 +12,7 @@ Blocks a Bash call that gives a branch a name that does not follow Conventional 
 
 Checked:
 
-- the new branch of `git checkout -b` or `-B`, `git switch -c`, `-C` or `--create`, and `git worktree add -b` or `-B`
+- the new branch of `git checkout -b` or `-B`, `git switch -c`, `-C`, `--create` or `--force-create`, and `git worktree add -b` or `-B`
 - the new name of `git branch <name>` with no options, and of `git branch -m` or `-M`
 - the `<name>` of `gh pr checkout <number> -b <name>` or `--branch <name>`, the local branch it creates
 - each of these after `sudo`, `env` or an environment assignment such as `GIT_TRACE=1`, with git or gh run by full path, such as `/usr/bin/git`, and, for git, after git options given as one word, such as `--git-dir=<path>`, or as `-C <path>` or `-c <setting>`

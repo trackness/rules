@@ -76,6 +76,7 @@ def test_conventional(name):
     pytest.param("git switch -c Add_Login", ["Add_Login"], id="switch_c"),
     pytest.param("git switch -C Add_Login", ["Add_Login"], id="switch_force_c"),
     pytest.param("git switch --create Add_Login", ["Add_Login"], id="switch_create"),
+    pytest.param("git switch --force-create Add_Login", ["Add_Login"], id="switch_force_create"),
     pytest.param("git -c color.ui=never log -1", [], id="git_config_option"),
     pytest.param("git -C /repo checkout -b Add_Login", ["Add_Login"], id="git_directory_option"),
     pytest.param("git worktree add -b Add_Login ../add-login", ["Add_Login"], id="worktree_add_b"),
