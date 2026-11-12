@@ -176,6 +176,20 @@ test('a script above the home folder is not a saved workflow', async ($, on) => 
   expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
 })
 
+test('a home folder written with a trailing slash still stops the walk before it', async ($, on) => {
+  const env = { HOME: '/home/me/', CLAUDE_CONFIG_DIR: '/config' }
+  engine(on, { files: { '/home/me/.claude/workflows/deep-research.js': RESEARCH }, env, cwd: '/home/me/notes', root: '/home/me/notes' })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'deep-research', args: 'What changed?' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
+})
+
+test('a home folder of / stops the walk before the file system root', async ($, on) => {
+  const env = { HOME: '/', CLAUDE_CONFIG_DIR: '/config' }
+  engine(on, { files: { '/.claude/workflows/deep-research.js': RESEARCH }, env, cwd: '/srv/scratch/notes', root: '/srv/scratch/notes' })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'deep-research', args: 'What changed?' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
+})
+
 test('outside the home folder and any repository, the walk reaches the file system root', async ($, on) => {
   engine(on, { files: { '/.claude/workflows/scan.js': SCRIPT }, cwd: '/srv/scratch/notes', root: '/srv/scratch/notes' })
   await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })

@@ -75,7 +75,8 @@ async function isWorktreeOf($: EngineInterface, root: string, outer: string): Pr
  * which is .claude in the home folder unless set, and the project root if set but empty.
  */
 async function savedWorkflowFolders($: EngineInterface): Promise<string[]> {
-  const home = await $.env.get('HOME')
+  // Claude Code resolves the home folder, which drops a trailing slash but keeps / whole.
+  const home = (await $.env.get('HOME'))?.replace(/(?!^)\/+$/, '')
   const cwd = await $.session.cwd()
   const projectRoot = await $.session.root()
   const sessionRepo = await repoRoot($, projectRoot)
