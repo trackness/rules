@@ -39,11 +39,14 @@ SSH_WORD = r"(?:^|[\s/])ssh "
 REREAD = r"(?:\S*/)?(?:eval|ssh) "
 # "&" chains only when another command follows it; in 2>&1 and &> it is a redirection, and a trailing "&" backgrounds a single command.
 CHAIN_OPERATOR = r"[;|\n]|(?<![<>])&(?!>|\s*$)"
+# $((...)) is arithmetic, where | and & are operators, only when its own brackets, nested once at most, close on "))":
+# $((a) | (b)) runs two subshells. Without $( or ` it runs no command, and without quotes, which can hide a ")" from bash.
+ARITHMETIC = r"""\$\(\((?:[^()$`'"]|\$(?!\()|\([^()$`'"]*\))*\)\)"""
 
 
 def substituted_commands(double_quoted):
     """The commands run by each $(...) or `...` inside a double-quoted string."""
-    unescaped = re.sub(r"\\.", "", double_quoted, flags=re.S)  # an escaped \` or \$ is literal text
+    unescaped = re.sub(ARITHMETIC, "", re.sub(r"\\.", "", double_quoted, flags=re.S))  # an escaped \` or \$ is literal text
     return [match["dollar"] if match["dollar"] is not None else match["backtick"] for match in re.finditer(SUBSTITUTION, unescaped)]
 
 
@@ -61,7 +64,7 @@ def chains(cmd):
         return True
     matches = [match[0] for match in re.finditer(QUOTED_OR_ESCAPED, cmd, flags=re.S)]
     quoted = [m.removeprefix("$") for m in matches if m[0] in "'\"$"]
-    outside_quotes = re.sub(QUOTED_OR_ESCAPED, "", cmd, flags=re.S)
+    outside_quotes = re.sub(ARITHMETIC, "", re.sub(QUOTED_OR_ESCAPED, "", cmd, flags=re.S))
     reread = re.match(REREAD, cmd)
     if reread and any(m in ("\\;", "\\|", "\\&") for m in matches):
         return True

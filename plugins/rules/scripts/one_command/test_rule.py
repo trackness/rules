@@ -56,6 +56,14 @@ def tool_call(cmd):
     pytest.param('echo "$(echo $((1+2)); ls)"', id="inside_substitution_after_arithmetic"),
     pytest.param('echo "n: $( (ls) | wc -l)"', id="inside_substitution_after_a_subshell"),
     pytest.param('echo "$(date +\\%F)"; ls "dir"', id="after_a_substitution_holding_an_escape"),
+    pytest.param("echo $((1+2)); ls", id="after_arithmetic"),
+    pytest.param("echo $((1)) | cat", id="pipe_after_arithmetic"),
+    pytest.param("echo $((echo a) | (tr a b))", id="substitution_of_subshells_that_opens_like_arithmetic"),
+    pytest.param('echo "$((echo a) | (tr a b))"', id="substitution_of_subshells_that_opens_like_arithmetic_in_double_quotes"),
+    pytest.param("echo \"$((echo a ' )) ' ; echo b) | tr a c)\"", id="substitution_that_opens_like_arithmetic_with_a_quoted_close"),
+    pytest.param("echo $(( $(echo 1 | tr 1 2) + 1 ))", id="inside_substitution_in_arithmetic"),
+    pytest.param('echo "$(( $(echo 1 | tr 1 2) + 1 ))"', id="inside_substitution_in_arithmetic_in_double_quotes"),
+    pytest.param("cat <<EOF > notes.txt\n$((1|2)) $(ls | wc -l)\nEOF", id="inside_substitution_after_arithmetic_in_unquoted_heredoc"),
     pytest.param("cat <<'EOF' > run.sh && chmod +x run.sh\necho hi\nEOF", id="on_heredoc_line"),
     pytest.param("cat > run.sh <<'EOF'\necho hi\nEOF\nbash run.sh", id="command_after_heredoc"),
     pytest.param("ssh deploy@web <<'EOF'\ncd /srv/app && git pull\nEOF", id="in_heredoc_fed_to_ssh"),
@@ -105,6 +113,10 @@ def test_chains(cmd):
     pytest.param('git commit -m "Release $(date +%F)"', id="substitution_running_one_command"),
     pytest.param('echo "Total: $(grep -c foo $(git ls-files))"', id="nested_substitution_running_one_command"),
     pytest.param('echo "Total; $(echo $((1 + 2)))"', id="separator_in_double_quotes_beside_brackets_nested_two_deep"),
+    pytest.param("echo $((flags | 4))", id="pipe_in_arithmetic"),
+    pytest.param('echo "$((flags & 4))"', id="ampersand_in_arithmetic_in_double_quotes"),
+    pytest.param("echo $(( (1+2) | 4 ))", id="pipe_in_arithmetic_beside_brackets"),
+    pytest.param("x=$((a|b))", id="pipe_in_arithmetic_assigned"),
     pytest.param("./publish.sh <<'EOF'\nfirst\nsecond\nEOF", id="heredoc_fed_to_a_script_ending_in_sh"),
     pytest.param("cat > /etc/ssh/sshd_config <<'EOF'\nPort 22\nPermitRootLogin no\nEOF", id="heredoc_written_to_a_path_holding_ssh"),
     pytest.param("cat notes.sh <<< 'a; b'", id="here_string_fed_to_a_command_reading_a_sh_file"),
@@ -134,6 +146,7 @@ def test_does_not_chain(cmd):
     pytest.param('echo "' + "$(x)" * 22, id="unclosed_double_quote_after_substitutions"),
     pytest.param('echo "' + "$( (a))" * 22, id="unclosed_double_quote_after_bracketed_substitutions"),
     pytest.param('echo "' + "$((1+2)) " * 22 + '$(echo \\"x)"', id="arithmetic_before_an_escaped_quote"),
+    pytest.param("echo " + "$(( (1) + $x " * 22, id="unclosed_arithmetic"),
 ])
 def test_long_command_is_checked_without_backtracking(cmd):
     """A pattern that can read the same text two ways backtracks exponentially: these take seconds there, twice as long per repeat."""

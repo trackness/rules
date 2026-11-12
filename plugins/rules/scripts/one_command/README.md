@@ -10,6 +10,7 @@ Allowed, because it is not chaining:
 - a separator in a comment: `ls -la # list them; then stop`
 - the body of a quoted heredoc, which is input: `git commit -m "$(cat <<'EOF' … EOF)"`
 - `&` in a redirection (`2>&1`, `&>`), or a trailing `&` that runs one command in the background
+- `|` or `&` as an operator in arithmetic, `$((flags | 4))`, whose brackets nest at most once inside it and which holds no quotes, `$(…)` or backticks
 
 Checked even though quoted, because it runs as commands:
 
