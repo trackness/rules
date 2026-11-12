@@ -24,10 +24,12 @@ def hard_wraps(text):
     fence = ""  # the backticks or tildes that opened the code block the current line is in, if any
     fence_indent = 0  # how far the line that opened that code block is indented
     continuable = False  # whether the previous line is text that the current line could continue
-    front_matter = text.startswith(("---\n", "---\r\n"))
+    lines = text.split("\n")
+    # front matter opens the file with a --- line and needs a closing one; without it, the first line is a rule line
+    front_matter = lines[0].rstrip("\r") == "---" and "---" in (line.rstrip("\r") for line in lines[1:])
     comment = False  # whether the current line is inside an HTML comment that an earlier line opened
     was_blank, indented_code = True, False
-    for number, line in enumerate(text.split("\n")):
+    for number, line in enumerate(lines):
         blank = not line.strip()
         # as in CommonMark, an indented line after a blank line starts a code block, which goes on while lines stay indented
         # shortcut: a list item's paragraph indented four spaces after a blank line is read as code, so its wraps pass; track list nesting if they get through
