@@ -46,6 +46,18 @@ def branches_that_conflict(tmp_path):
     return repo
 
 
+def rebase_with_its_conflict_resolved(tmp_path, branch, *options):
+    """A new repo where git rebases branch onto the other of main and feature/add-login, stopped at the conflict in notes.txt, now resolved and staged."""
+    repo = branches_that_conflict(tmp_path)
+    git("-C", repo, "switch", "-q", branch)
+    onto = "feature/add-login" if branch == "main" else "main"
+    stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", *options, onto], env=GIT_ENV, capture_output=True)
+    assert stopped.returncode != 0 and git("-C", repo, "branch", "--show-current") == ""
+    (repo / "notes.txt").write_text("login\nlogout\n")
+    git("-C", repo, "add", "notes.txt")
+    return repo
+
+
 def git_in_session(tmp_path, repo, *args, script=SCRIPT):
     """Start a session, then run git in repo with the given arguments as Claude's Bash tool would, with the env file sourced."""
     return run_in_session(tmp_path, script, "git", "-C", repo, *args)
@@ -75,6 +87,11 @@ def test_a_repository_on_develop_is_off_a_work_branch(tmp_path):
     assert off_a_work_branch(repo_on(tmp_path, "develop")) == "on develop"
 
 
+def test_a_repository_on_main_in_another_case_is_off_a_work_branch(tmp_path):
+    """On a case-insensitive disk, such as macOS's by default, git checkout MAIN checks out main but names the branch MAIN."""
+    assert off_a_work_branch(repo_on(tmp_path, "MAIN")) == "on MAIN"
+
+
 def test_a_repository_on_a_detached_head_is_off_a_work_branch(tmp_path):
     repo = repo_on(tmp_path, "feature/add-login")
     git("-C", repo, "switch", "-q", "--detach")
@@ -95,9 +112,10 @@ def test_a_repository_with_no_commits_is_not_off_a_work_branch(tmp_path):
     assert off_a_work_branch(tmp_path / "repo") is None
 
 
-def test_a_repository_git_is_rebasing_is_not_off_a_work_branch(tmp_path):
+@pytest.mark.parametrize("branch", ["feature/add-login", "main"])
+def test_a_repository_git_is_rebasing_is_not_off_a_work_branch(tmp_path, branch):
     """git detaches HEAD while it rebases a branch, and resolving a conflict then means changing files."""
-    repo = repo_on(tmp_path, "feature/add-login")
+    repo = repo_on(tmp_path, branch)
     stop_in_a_rebase(repo)
     assert off_a_work_branch(repo) is None
 
@@ -181,6 +199,14 @@ def test_main_allows_edit_in_a_worktree_on_a_work_branch_while_the_session_is_in
     assert main(tool_call(tmp_path / "worktree" / "notes.md"), io.StringIO(), io.StringIO()) == 0
 
 
+def test_main_goes_by_the_checkout_that_holds_the_file_whatever_git_dir_claude_code_was_started_with(tmp_path, monkeypatch):
+    """A git hook that starts Claude Code hands it GIT_DIR, here naming a repository on a work branch, which git would use over the file's."""
+    repo = repo_on(tmp_path, "main")
+    other = repo_on(tmp_path / "other", "feature/add-login")
+    monkeypatch.setenv("GIT_DIR", str(other / ".git"))
+    assert main(tool_call(repo / "notes.md"), io.StringIO(), io.StringIO()) == 2
+
+
 def test_the_script_run_as_a_hook_blocks_an_edit_in_a_repository_on_main(tmp_path):
     """Claude Code passes the tool call on stdin, and takes exit code 2 as a block."""
     repo = repo_on(tmp_path, "main")
@@ -197,11 +223,8 @@ def test_the_script_run_as_a_hook_blocks_a_notebook_edit_in_a_repository_on_main
     assert result.returncode == 2
 
 
-def test_the_script_run_as_a_hook_reads_a_path_holding_a_non_ascii_character_whatever_the_locale(tmp_path):
-    """Claude Code writes the tool call in UTF-8, where Python before 3.15 reads stdin in the locale's encoding, such as Latin-1.
-
-    PYTHONIOENCODING stands for such a locale here, on every Python.
-    """
+def test_the_script_run_as_a_hook_reads_a_path_holding_a_non_ascii_character_whatever_pythonioencoding_says(tmp_path):
+    """Claude Code writes the tool call in UTF-8, where Python reads stdin in the encoding PYTHONIOENCODING names, such as Latin-1."""
     (tmp_path / "café").mkdir()
     repo = repo_on(tmp_path / "café", "main")
     env = {**GIT_ENV, "PYTHONIOENCODING": "latin-1"}
@@ -253,6 +276,34 @@ def test_registered_hook_accepts_the_commit_that_finishes_a_merge_stopped_at_a_c
 
 
 @needs_config_hooks
+@pytest.mark.parametrize("options", [pytest.param([], id="merge"), pytest.param(["--apply"], id="apply")])
+def test_registered_hook_rejects_a_commit_while_git_rebases_main(tmp_path, options):
+    """A commit made during a rebase lands on the branch rebased, here main."""
+    repo = rebase_with_its_conflict_resolved(tmp_path, "main", *options)
+    result = git_in_session(tmp_path, repo, "commit", "-q", "-m", "feat: more")
+    assert result.returncode != 0 and result.stderr == (
+        "Rejected: work happens only on a branch, and this repository is rebasing main, so nothing was committed. "
+        "Finish the rebase with git rebase --continue, then create a branch with git switch -c <type>/<description>, which keeps the changes, and commit there.\n"
+    )
+
+
+@needs_config_hooks
+@pytest.mark.parametrize("options", [pytest.param([], id="merge"), pytest.param(["--apply"], id="apply")])
+def test_registered_hook_lets_git_rebase_continue_finish_a_rebase_of_main(tmp_path, options):
+    """git rebase --continue, which the rejection above asks for, commits without running the pre-commit hook."""
+    repo = rebase_with_its_conflict_resolved(tmp_path, "main", *options)
+    result = run_in_session(tmp_path, SCRIPT, "env", "GIT_EDITOR=true", "git", "-C", repo, "rebase", "--continue")
+    assert result.returncode == 0, result.stderr
+    assert git("-C", repo, "branch", "--show-current") == "main\n"
+
+
+@needs_config_hooks
+def test_registered_hook_accepts_a_commit_while_git_rebases_a_work_branch(tmp_path):
+    repo = rebase_with_its_conflict_resolved(tmp_path, "feature/add-login")
+    assert git_in_session(tmp_path, repo, "commit", "-q", "-m", "feat: more").returncode == 0
+
+
+@needs_config_hooks
 def test_registered_hook_runs_from_a_path_with_spaces_and_quotes(tmp_path):
     """The plugin can be installed under such a path; the session's shell must still parse the env file, and git still run the script."""
     scripts = tmp_path / "it's a \"plugin\"" / "scripts"
@@ -263,7 +314,7 @@ def test_registered_hook_runs_from_a_path_with_spaces_and_quotes(tmp_path):
 
 
 def test_session_start_without_an_env_file_tells_claude_the_commit_check_is_not_active():
-    """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook.
+    """A SessionStart hook run without a CLAUDE_ENV_FILE has nowhere to register the git hook.
 
     Claude Code adds a SessionStart hook's stdout at exit 0 to Claude's context; Claude never sees its stderr.
     """

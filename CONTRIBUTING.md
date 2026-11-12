@@ -4,6 +4,7 @@
 
 - Branch from `main`, naming the branch `<type>/<description>` per [Conventional Branch](https://conventionalbranch.org/): `feature/` (or `feat/`), `bugfix/` (or `fix/`), `hotfix/`, `release/` or `chore/`, lowercase and hyphen-separated.
 - Write commit messages and the pull request title per [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/), such as `feat: add …` or `fix: …`.
+- Make every change on a branch: the `git-rules` plugin's work-branch hook blocks edits on `main`, untracked files included.
 - To try a change in a Claude Code session, start it from the repo root with `claude --plugin-dir plugins/<plugin>`.
 - Run the suites from the repo root, `uv run pytest`, `claude plugin test plugins/subagent-model` and `claude plugin test plugins/row-time`, then open a pull request to `main`.
 

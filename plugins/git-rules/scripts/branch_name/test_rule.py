@@ -76,6 +76,7 @@ def test_conventional(name):
     pytest.param("git switch -c Add_Login", ["Add_Login"], id="switch_c"),
     pytest.param("git switch -C Add_Login", ["Add_Login"], id="switch_force_c"),
     pytest.param("git switch --create Add_Login", ["Add_Login"], id="switch_create"),
+    pytest.param("git switch --force-create Add_Login", ["Add_Login"], id="switch_force_create"),
     pytest.param("git -c color.ui=never log -1", [], id="git_config_option"),
     pytest.param("git -C /repo checkout -b Add_Login", ["Add_Login"], id="git_directory_option"),
     pytest.param("git worktree add -b Add_Login ../add-login", ["Add_Login"], id="worktree_add_b"),
@@ -92,6 +93,8 @@ def test_conventional(name):
     pytest.param("gh pr checkout 5 -b Add_Login", ["Add_Login"], id="gh_pr_checkout_b"),
     pytest.param("gh pr checkout 5 --branch Add_Login", ["Add_Login"], id="gh_pr_checkout_branch"),
     pytest.param("gh pr checkout 5", [], id="gh_pr_checkout_own_branch"),
+    pytest.param("gh issue develop 12 -n Add_Login", ["Add_Login"], id="gh_issue_develop_n"),
+    pytest.param("gh issue develop 12 --base main --name Add_Login --checkout", ["Add_Login"], id="gh_issue_develop_name"),
     pytest.param("ls -la", [], id="not_git"),
     pytest.param("git --version", [], id="git_without_subcommand"),
     pytest.param("cat > notes.txt <<'EOF'\nDon't stop.\nEOF", [], id="unbalanced_quote_in_heredoc"),
@@ -134,11 +137,16 @@ def test_conventional(name):
     pytest.param("git --git-dir /repo/.git checkout -b Add_Login", [], id="unread_git_option_value_as_next_word"),
     pytest.param("git co -b Add_Login", [], id="unread_git_alias"),
     pytest.param("gh pr co 5 -b Add_Login", [], id="unread_gh_alias"),
+    pytest.param("gh issue develop 12", [], id="unread_gh_issue_develop_named_after_the_issue"),
+    pytest.param("gh api repos/owner/repo/git/refs -f ref=refs/heads/Add_Login -f sha=4444", [], id="unread_gh_api"),
     pytest.param("sudo -u root git checkout -b Add_Login", [], id="unread_sudo_option"),
     pytest.param("bash -c 'git checkout -b Add_Login'", [], id="unread_bash_c"),
     pytest.param("xargs git checkout -b Add_Login", [], id="unread_xargs"),
     pytest.param("git commit -m '#12 fix' && git checkout -b Add_Login", [], id="unread_after_a_quoted_word_starting_with_hash"),
     pytest.param("if true; then git checkout -b Add_Login; fi", [], id="unread_after_a_shell_keyword"),
+    pytest.param('git checkout -b "feature/$TICKET"', [], id="unread_name_holding_a_variable"),
+    pytest.param("git switch -c $(cat name.txt)", [], id="unread_name_from_a_command_substitution"),
+    pytest.param("git branch feature/`date +%s`", [], id="unread_name_holding_a_backtick"),
 ])
 def test_new_branch_names(cmd, names):
     assert new_branch_names(cmd) == names
@@ -176,8 +184,8 @@ def test_main_block_gives_a_reason():
     assert stderr.getvalue() == f"Blocked: branch name Add_Login does not follow Conventional Branch 1.0.0. {NAMING}\n"
 
 
-def test_script_reads_its_input_as_utf_8_whatever_the_locale():
-    """Claude Code sends UTF-8, which Python 3.9 to 3.14 would decode with the locale's encoding, here ASCII, and fail with exit 1, which blocks nothing."""
+def test_script_reads_its_input_as_utf_8_whatever_pythonioencoding_says():
+    """Claude Code sends UTF-8, which Python would decode with the encoding PYTHONIOENCODING names, here ASCII, and fail with exit 1, which blocks nothing."""
     hook_input = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git checkout -b Café"}}, ensure_ascii=False)
     result = subprocess.run([SCRIPT], input=hook_input.encode(), env={**GIT_ENV, "PYTHONIOENCODING": "ascii"}, capture_output=True)
     assert result.returncode == 2, result.stderr
@@ -341,7 +349,7 @@ def test_pre_push_reads_a_local_ref_typed_with_spaces(tmp_path):
 
 
 def test_session_start_without_env_file_tells_claude_the_push_check_is_inactive():
-    """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook.
+    """A SessionStart hook run without a CLAUDE_ENV_FILE has nowhere to register the git hook.
 
     Claude Code adds a SessionStart hook's stdout at exit 0 to Claude's context; Claude never sees its stderr.
     """

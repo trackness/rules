@@ -33,14 +33,13 @@ function engine(on: On, { files = {}, links = {}, env = { HOME: '/home/me' }, cw
     spawns.push(e)
     return STARTED
   })
+  on('session.start', ($, e) => ({ cwd: e.cwd }))
   on('session.cwd', () => ({ value: cwd }))
   on('session.root', () => ({ value: root }))
   on('env.get', ($, e) => ({ value: env[e.name] }))
-  // The kit runs on POSIX and resolves a Windows path against the plugin's folder: take it back to its drive.
-  const at = (path: string) => path.replace(/^.*(?=[A-Z]:\/)/, '')
-  on('fs.exists', ($, e) => ({ value: paths.some((path) => path === at(e.path) || path.startsWith(`${at(e.path)}/`)) }))
+  on('fs.exists', ($, e) => ({ value: paths.some((path) => path === e.path || path.startsWith(`${e.path}/`)) }))
   on('fs.list', ($, e) => {
-    const dir = at(e.path)
+    const dir = e.path
     const inside = paths.filter((path) => path.startsWith(`${dir}/`))
     if (inside.length === 0) throw new Error(`ENOENT: ${e.path}`)
     const names = inside.map((path) => path.slice(dir.length + 1)).filter((name) => !name.includes('/'))
@@ -54,7 +53,7 @@ function engine(on: On, { files = {}, links = {}, env = { HOME: '/home/me' }, cw
     return { value: names.map(entry) }
   })
   on('fs.read', ($, e) => {
-    const text = disk[links[at(e.path)] ?? at(e.path)]
+    const text = disk[links[e.path] ?? e.path]
     if (text === undefined) throw new Error(`ENOENT: ${e.path}`)
     return { value: text }
   })
@@ -178,43 +177,22 @@ test('a script above the home folder is not a saved workflow', async ($, on) => 
   expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
 })
 
-test('outside the home folder and any repository, the walk reaches the file system root', async ($, on) => {
-  engine(on, { files: { '/.claude/workflows/scan.js': SCRIPT }, cwd: '/srv/scratch/notes', root: '/srv/scratch/notes' })
-  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
-  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
-})
-
-test('a Windows working directory walks up its own folders to the repository root', async ($, on) => {
-  const files = { 'C:/work/.git/HEAD': 'ref: refs/heads/main\n', 'C:/work/.claude/workflows/todo-scan.js': SCRIPT }
-  engine(on, { files, env: { OS: 'Windows_NT', USERPROFILE: 'C:\\Users\\me' }, cwd: 'C:\\work\\pkg', root: 'C:\\work' })
-  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
-  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
-})
-
-test('a Windows working directory outside a repository walks up to its drive\'s root and stops there', async ($, on) => {
-  const env = { OS: 'Windows_NT', USERPROFILE: 'C:\\Users\\me' }
-  engine(on, { files: { '/.claude/workflows/deep-research.js': RESEARCH }, env, cwd: 'C:\\scratch\\notes', root: 'C:\\scratch\\notes' })
+test('a home folder written with a trailing slash still stops the walk before it', async ($, on) => {
+  const env = { HOME: '/home/me/', CLAUDE_CONFIG_DIR: '/config' }
+  engine(on, { files: { '/home/me/.claude/workflows/deep-research.js': RESEARCH }, env, cwd: '/home/me/notes', root: '/home/me/notes' })
   await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'deep-research', args: 'What changed?' })
   expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
 })
 
-test('on Windows, without HOME, the personal folder is under USERPROFILE', async ($, on) => {
-  const env = { OS: 'Windows_NT', USERPROFILE: 'C:\\Users\\me' }
-  engine(on, { files: { 'C:/Users/me/.claude/workflows/scan.js': SCRIPT }, env })
-  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
-  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
+test('a home folder of / stops the walk before the file system root', async ($, on) => {
+  const env = { HOME: '/', CLAUDE_CONFIG_DIR: '/config' }
+  engine(on, { files: { '/.claude/workflows/deep-research.js': RESEARCH }, env, cwd: '/srv/scratch/notes', root: '/srv/scratch/notes' })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'deep-research', args: 'What changed?' })
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual(STARTED)
 })
 
-test('on Windows, with USERPROFILE and HOME both set, the home folder is USERPROFILE, as os.homedir() takes it', async ($, on) => {
-  const env = { OS: 'Windows_NT', HOME: 'C:\\msys\\home\\me', USERPROFILE: 'C:\\Users\\me' }
-  engine(on, { files: { 'C:/Users/me/.claude/workflows/scan.js': SCRIPT }, env })
-  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
-  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
-})
-
-test('elsewhere, with USERPROFILE and HOME both set, as under WSL, the home folder is HOME, as os.homedir() takes it', async ($, on) => {
-  const env = { HOME: '/home/me', USERPROFILE: '/mnt/c/Users/me' }
-  engine(on, { files: { '/home/me/.claude/workflows/scan.js': SCRIPT }, env })
+test('outside the home folder and any repository, the walk reaches the file system root', async ($, on) => {
+  engine(on, { files: { '/.claude/workflows/scan.js': SCRIPT }, cwd: '/srv/scratch/notes', root: '/srv/scratch/notes' })
   await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', name: 'scan' })
   expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
 })
@@ -382,6 +360,29 @@ test('CLAUDE_CODE_SUBAGENT_MODEL_FORCE set to a value Claude Code reads as off l
 
 test('CLAUDE_CODE_SUBAGENT_MODEL_FORCE is on in any case and with blanks around it, as Claude Code reads it', async ($, on) => {
   engine(on, { env: { HOME: '/home/me', CLAUDE_CODE_SUBAGENT_MODEL_FORCE: 'TRUE ' } })
+  expect(await $.agent.spawn(SPAWN)).toEqual(STARTED)
+})
+
+// Coordinator mode, with its workers forced onto the session's model: Claude Code clears an Agent call's model.
+const COORDINATOR = { HOME: '/home/me', CLAUDE_CODE_COORDINATOR_MODE: '1', CLAUDE_CODE_COORDINATOR_FORCE_WORKER_INHERIT_MODEL: '1' }
+
+test('in coordinator mode with workers forced to inherit, an agent starts without a model, while a workflow\'s is still checked', async ($, on) => {
+  engine(on, { env: COORDINATOR })
+  await $.session.start({ cwd: '/srv/work/pkg', surface: null, isInteractive: false })
+  await $.tool.call({ tool: 'Workflow', tool_use_id: 'toolu_workflow', script: SCRIPT })
+  expect(await $.agent.spawn(SPAWN)).toEqual(STARTED)
+  expect(await $.agent.spawn(WORKFLOW_AGENT)).toEqual({ deny: WORKFLOW_REASON })
+})
+
+test('in an interactive local session, Claude Code keeps coordinator mode off, so an agent without a model is denied', async ($, on) => {
+  engine(on, { env: COORDINATOR })
+  await $.session.start({ cwd: '/srv/work/pkg', surface: 'terminal', isInteractive: true })
+  expect(await $.agent.spawn(SPAWN)).toEqual({ deny: AGENT_REASON })
+})
+
+test('in an interactive session with CLAUDE_CODE_REMOTE on, coordinator mode is on, so an agent starts without a model', async ($, on) => {
+  engine(on, { env: { ...COORDINATOR, CLAUDE_CODE_REMOTE: 'true' } })
+  await $.session.start({ cwd: '/srv/work/pkg', surface: 'terminal', isInteractive: true })
   expect(await $.agent.spawn(SPAWN)).toEqual(STARTED)
 })
 

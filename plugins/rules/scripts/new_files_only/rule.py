@@ -21,5 +21,5 @@ def main(stdin, stderr):
 
 
 if __name__ == "__main__":
-    # The bytes, because sys.stdin decodes with the locale's encoding, which misreads a non-ASCII path; json.load reads UTF-8 from bytes.
+    # The bytes, because sys.stdin decodes with PYTHONIOENCODING, or outside UTF-8 mode the locale's encoding, which can misread a non-ASCII path; json.load reads UTF-8 from bytes.
     sys.exit(main(sys.stdin.buffer, sys.stderr))

@@ -20,12 +20,11 @@ None of these git hooks checks:
 
 - a git command that turns the hook off, such as with `-c hook.<name>.enabled=false` or with `-c hook.<name>.event=`, which empties its list of events, or that runs without the session's `GIT_CONFIG_*` variables or with them changed, such as under `GIT_CONFIG_COUNT=0` or `env -i`
 - a repository or user whose git config sets `hook.<name>.enabled` to `false`, which turns the hook off for every later git command there
-- git run by a PowerShell command, as Requirements says
 - git run outside Claude's Bash commands
 
 ## Requirements
 
-The rules run with the `python3` on the `PATH`, which must be Python 3.9 or later, and use only its standard library. The plugin requires git 2.54.0 or later, the first release with hooks defined in config, which is how the rules register their git hooks; with an older git, no rule registers its git hook, and each tells Claude at session start that its check is not active, naming the git version it found. The rules register their hooks with lines in the session's `CLAUDE_ENV_FILE` that are not plain assignments, so Claude Code gives PowerShell commands none of that file's variables, from these rules or any other hook, and git run by a PowerShell command is not checked; Bash commands get every variable. On Windows without Git Bash, Claude Code has no Bash tool, only PowerShell, and runs the `SessionStart` hooks in PowerShell with no `CLAUDE_ENV_FILE` to register the git hooks in; their command, written for a POSIX shell, may not run there at all, and if it does, each rule tells Claude at session start that its check is not active. Until the workspace is trusted, Claude Code runs none of the plugin's hooks.
+The plugin requires macOS or Linux, Claude Code 2.1.322 or later, Python 3.15 or later as the `python3` on the `PATH`, and git 2.54.0 or later, the first release with hooks defined in config, which is how the rules register their git hooks. The rules use only Python's standard library. When a session starts, each rule checks the Python and the git it finds, and with an older one registers no git hook and tells Claude that its check is not active, naming the version it found. Until the workspace is trusted, Claude Code runs none of the plugin's hooks.
 
 ## Install
 

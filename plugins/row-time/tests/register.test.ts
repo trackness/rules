@@ -61,9 +61,11 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0, writte
   on('fs.list', ($, e) => {
     const names = Object.keys(files).filter((path) => path.startsWith(`${e.path}/`)).map((path) => path.slice(e.path.length + 1))
     if (names.length === 0) throw new Error(`ENOENT: no such file or directory, scandir '${e.path}'`)
-    // The transcripts here are ASCII, a byte to a character.
-    const entry = (name: string) => ({ name, kind: 'file' as const, size: files[`${e.path}/${name}`]?.length ?? 0, mtimeMs: 0, isLink: false })
-    return { value: names.filter((name) => !name.includes('/')).map(entry) }
+    const entry = (name: string) => ({ name, kind: 'file' as const, size: new TextEncoder().encode(files[`${e.path}/${name}`]).length, mtimeMs: 0, isLink: false })
+    // A folder within this one, which a listing gives the size 0.
+    const folders = new Set(names.filter((name) => name.includes('/')).map((name) => name.slice(0, name.indexOf('/'))))
+    const folder = (name: string) => ({ name, kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: false })
+    return { value: [...names.filter((name) => !name.includes('/')).map(entry), ...[...folders].map(folder)] }
   })
   on('process.run', ($, e) => {
     ran.push(e.argv)
@@ -74,9 +76,12 @@ function host(on: On, files: Record<string, string>, commandsAborted = 0, writte
     if (command !== 'sh' || flag !== '-c' || script !== READ_ON || text === undefined) {
       return { value: { exitCode: 1, stdout: '', stderr: `${String(command)}: ${String(path)}: No such file or directory\n`, isStdoutTruncated: false, isStderrTruncated: false } }
     }
-    // The transcripts here are ASCII, a byte to a character.
-    const stdout = text.slice(Number(from) - 1, Number(from) - 1 + STDOUT_LIMIT + 1)
-    return { value: { exitCode: 0, stdout: stdout.slice(0, STDOUT_LIMIT), stderr: '', isStdoutTruncated: stdout.length > STDOUT_LIMIT, isStderrTruncated: false } }
+    const bytes = new TextEncoder().encode(text).subarray(Number(from) - 1, Number(from) - 1 + STDOUT_LIMIT + 1)
+    // A cut inside a character of more than one byte drops that character: the cut steps back past its other bytes.
+    let end = Math.min(bytes.length, STDOUT_LIMIT)
+    while (end < bytes.length && ((bytes[end] ?? 0) & 0xc0) === 0x80) end -= 1
+    const stdout = new TextDecoder().decode(bytes.subarray(0, end))
+    return { value: { exitCode: 0, stdout, stderr: '', isStdoutTruncated: bytes.length > STDOUT_LIMIT, isStderrTruncated: false } }
   })
   return ran
 }
@@ -297,6 +302,18 @@ test('a row whose time is already in the file is drawn from it, without reading 
   expect({ shown: (await ui.find({ type: 'Text' }))?.text, ran }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [] })
 })
 
+test('a row whose line in the file a stopped write cut short shows the time the transcript records, and the file is whole again', async ($, on) => {
+  // The write of the file stopped part of the way into the reply's line.
+  const files: Record<string, string> = { [TRANSCRIPT]: REPLY_SESSION, [TIMES]: `${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:3` }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'resume', transcript_path: TRANSCRIPT })
+  const ui = await drawReplyRow($)
+  expect({ shown: (await ui.find({ type: 'Text' }))?.text, file: files[TIMES] }).toEqual({
+    shown: `${timeOfDay('2026-11-10T09:32:41.970Z')} `,
+    file: `${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:32:41.970Z\n`,
+  })
+})
+
 test('a row of a subagent shows the time the subagent\'s own transcript records for it', async ($, on) => {
   // Claude Code keeps each subagent's transcript in the session's own folder, beside the session's transcript.
   const subagent = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a/subagents/agent-aa3ba150d12cc0104.jsonl'
@@ -312,6 +329,23 @@ test('a row of a subagent shows the time the subagent\'s own transcript records 
   await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
   const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolUse', requestId: listing.tool_use_id, props: listing })
   expect((await ui.find({ type: 'Text' }))?.text).toBe(`${timeOfDay('2026-11-10T10:02:05.310Z')} `)
+})
+
+test('a row of an agent a workflow runs shows the time its own transcript records, in a folder within the subagents folder, and the run\'s journal is never read', async ($, on) => {
+  // Claude Code keeps the transcripts of a workflow run's agents in a folder of the run's own, beside the run's journal.
+  const run = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a/subagents/workflows/wf_e86dd8ff-bb3'
+  const agent = `${run}/agent-abe28368165282cec.jsonl`
+  const listing = { tool_use_id: 'toolu_01Wq4mRt7YbN2cXp9LsKd3Fe', tool: 'Bash', input: { command: 'ls' }, isRunning: false, isErrored: false, isInterrupted: false, isExpanded: false }
+  const ran = host(on, {
+    [TRANSCRIPT]: SKILL_SESSION,
+    // Listed before the agent's transcript, so a read of it would come first.
+    [`${run}/journal.jsonl`]: transcript({ type: 'launched' }, { type: 'started', agentId: 'abe28368165282cec', label: 'List the files' }),
+    [agent]: transcript(assistant('3c9e1f47-8a2d-4b6e-a5f0-7d1c2b9e4a68', '2026-11-10T10:02:05.310Z', { type: 'tool_use', id: listing.tool_use_id, name: 'Bash', input: listing.input })),
+  })
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await $.ui.mount({ plugin: 'row-time', surface: 'terminal', component: 'ToolUse', requestId: listing.tool_use_id, props: listing })
+  // The file a read is of is the last word of its command.
+  expect({ shown: (await ui.find({ type: 'Text' }))?.text, read: ran.map((argv) => argv.at(-1)) }).toEqual({ shown: `${timeOfDay('2026-11-10T10:02:05.310Z')} `, read: [TRANSCRIPT, agent] })
 })
 
 test('a row no transcript holds yet is looked for, when drawn again, only in the transcripts that have grown, and never in a subagent\'s meta file', async ($, on) => {
@@ -457,6 +491,21 @@ test('a row the transcript lacked when first drawn is looked for, when drawn aga
   const shown = (await ui.find({ type: 'Text' }))?.text
   // A read that starts at a byte goes straight to it: one that starts at a line counts through every line before.
   const fromTheCall = ['sh', '-c', READ_ON, 'sh', String(BEFORE_THE_CALL.length + 1), TRANSCRIPT]
+  expect({ shown, ran: ran.slice(ranForFirstDraw) }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [fromTheCall] })
+})
+
+test('a read starts at the byte after those already read, where the lines before hold characters of more than one byte', async ($, on) => {
+  const clock = mock.clock(on)
+  // A prompt whose dashes, quotes and tick take two or three bytes each in UTF-8.
+  const before = transcript(user('e0a040a6-aec9-4274-97fb-1f81430a0f1a', '2026-11-10T09:28:40.249Z', 'Lade den Skill — «plugin-authoring» ✓'))
+  const files = { [TRANSCRIPT]: before }
+  const ran = host(on, files)
+  await $.classic.SessionStart({ source: 'startup', transcript_path: TRANSCRIPT })
+  const ui = await drawSkillRow($)
+  const ranForFirstDraw = ran.length
+  await recordSkillCall($, clock, files)
+  const shown = (await ui.find({ type: 'Text' }))?.text
+  const fromTheCall = ['sh', '-c', READ_ON, 'sh', String(new TextEncoder().encode(before).length + 1), TRANSCRIPT]
   expect({ shown, ran: ran.slice(ranForFirstDraw) }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [fromTheCall] })
 })
 

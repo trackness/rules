@@ -29,13 +29,22 @@ def off_a_work_branch(directory):
         # git detaches HEAD while it rebases a branch, and keeps the rebase's state in one of these two directories.
         rebase_state = git(directory, "rev-parse", "--path-format=absolute", "--git-path", "rebase-merge", "--git-path", "rebase-apply").stdout.splitlines()
         return None if any(Path(path).is_dir() for path in rebase_state) else "on a detached HEAD"
-    if branch not in SHARED_BRANCHES:
+    if branch.lower() not in SHARED_BRANCHES:  # on a case-insensitive disk, git checkout MAIN checks out main as MAIN
         return None
     # git switch -c refuses to run in a merge, cherry-pick or revert stopped at a conflict, which keeps its state in one of these files.
     stopped = git(
         directory, "rev-parse", "--path-format=absolute", "--git-path", "MERGE_HEAD", "--git-path", "CHERRY_PICK_HEAD", "--git-path", "REVERT_HEAD"
     ).stdout.splitlines()
     return None if any(Path(path).is_file() for path in stopped) else f"on {branch}"
+
+
+def rebased_branch(directory):
+    """The branch git is rebasing in the repository holding directory, such as main, or None when no rebase is in progress."""
+    # git keeps the rebased branch's ref, such as refs/heads/main, or detached HEAD, in one of these files while it rebases.
+    head_names = git(
+        directory, "rev-parse", "--path-format=absolute", "--git-path", "rebase-merge/head-name", "--git-path", "rebase-apply/head-name"
+    ).stdout.splitlines()
+    return next((Path(path).read_text().strip().removeprefix("refs/heads/") for path in head_names if Path(path).is_file()), None)
 
 
 def register(env_file, stdout):
@@ -47,12 +56,17 @@ def register(env_file, stdout):
 
 def pre_commit(stderr):
     """Return git's exit code for the commit it is about to make: 1 rejects the commit, with a reason on stderr."""
-    where = off_a_work_branch(".")  # git runs a pre-commit hook at the top of the working tree
+    rebased = rebased_branch(".")  # git runs a pre-commit hook at the top of the working tree
+    if rebased and rebased.lower() in SHARED_BRANCHES:
+        # A commit made during a rebase lands on the branch rebased. git switch -c refuses to run then, and git rebase --continue runs no pre-commit hook.
+        where, create = f"rebasing {rebased}", "Finish the rebase with git rebase --continue, then create"
+    else:
+        where, create = off_a_work_branch("."), "Create"
     if not where:
         return 0
     print(
         f"Rejected: work happens only on a branch, and this repository is {where}, so nothing was committed. "
-        "Create a branch with git switch -c <type>/<description>, which keeps the changes, and commit there.",
+        f"{create} a branch with git switch -c <type>/<description>, which keeps the changes, and commit there.",
         file=stderr,
     )
     return 1
@@ -69,6 +83,9 @@ def main(stdin, stdout, stderr, env_file=None):
     if hook_input.get("hook_event_name") == "SessionStart":
         register(env_file, stdout)
         return 0
+    # A git hook that starts Claude Code hands it GIT_DIR and the like, which would point git at that repository, not the file's.
+    for name in git(".", "rev-parse", "--local-env-vars").stdout.split():
+        os.environ.pop(name, None)
     tool_input = hook_input["tool_input"]
     path = Path(tool_input.get("file_path") or tool_input["notebook_path"])  # NotebookEdit's name for its file
     # Write makes the directories a new file needs, so git is asked in the nearest one that exists.

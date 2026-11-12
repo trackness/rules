@@ -183,6 +183,10 @@ def test_running_time_and_token_count_stand_at_the_right_edge():
     assert len(body(columns=120, tokenCount=12_345)) == 120
 
 
+def test_running_time_is_never_negative_after_the_clock_steps_back():
+    assert cells(body(startTime=NOW + 2_000))[-1] == "0s"
+
+
 def test_no_token_count_while_it_is_zero():
     assert cells(body(startTime=NOW - 5_700, tokenCount=0))[-1] == "5s"
 
@@ -190,6 +194,9 @@ def test_no_token_count_while_it_is_zero():
 @pytest.mark.parametrize("count, written", [
     pytest.param(850, "850", id="under_a_thousand"),
     pytest.param(1_234_567, "1.2m", id="millions"),
+    pytest.param(12_350, "12.4k", id="half_rounds_up"),
+    pytest.param(999_949, "999.9k", id="last_thousands"),
+    pytest.param(999_950, "1.0m", id="rounds_up_into_millions"),
 ])
 def test_token_count(count, written):
     assert token_count(count) == written
@@ -227,6 +234,16 @@ def test_each_wide_character_takes_two_of_the_panels_columns():
     description = "認証モジュールを確認"
     row = body(columns=120, description=description, label="Reading src/auth/session.py")
     assert len(row) + len(description) == 120
+
+
+@pytest.mark.parametrize("text, columns", [
+    pytest.param("สวัสดี", 4, id="thai_vowel_and_tone_marks"),
+    pytest.param("é", 1, id="combining_accent"),
+    pytest.param("a​b", 2, id="zero_width_space"),
+    pytest.param("認証abc", 7, id="wide_and_ascii"),
+])
+def test_display_width_counts_zero_for_marks_that_take_no_column(text, columns):
+    assert display_width(text) == columns
 
 
 def test_wide_characters_line_up_by_the_columns_they_take():

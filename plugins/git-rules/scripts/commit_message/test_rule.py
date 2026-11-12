@@ -154,7 +154,7 @@ def test_ways_past_the_commit_msg_check_the_readme_lists(tmp_path, command):
 
 
 def test_session_start_without_env_file_tells_claude_the_check_is_inactive():
-    """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook.
+    """A SessionStart hook run without a CLAUDE_ENV_FILE has nowhere to register the git hook.
 
     Claude Code adds a SessionStart hook's stdout at exit 0 to Claude's context; Claude never sees its stderr.
     """

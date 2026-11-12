@@ -32,6 +32,11 @@ def edit_call(file_path, old_string, new_string, replace_all=False):
     pytest.param("<!-- a note -->\nThis paragraph runs on\nto a second line.\n", id="paragraph_runs_on_after_one_line_html_comment"),
     pytest.param("This paragraph runs on\n    to an indented second line\n    and a third.\n", id="paragraph_runs_on_to_indented_lines"),
     pytest.param("- Run:\n\n     ```sh\n     uv sync\n     ```\n\n  Then the tests\n  run on their own.\n", id="paragraph_runs_on_after_fence_closed_at_its_own_indent"),
+    pytest.param("---\nThis paragraph runs on\nto a second line.\n", id="paragraph_runs_on_after_a_rule_line_that_opens_the_file"),
+    pytest.param("+++\nThis paragraph runs on\nto a second line.\n", id="paragraph_runs_on_after_a_plus_line_that_closes_no_front_matter"),
+    pytest.param("This paragraph runs on\n*emphasis* first.\n", id="paragraph_runs_on_to_a_line_starting_with_emphasis"),
+    pytest.param("The water cooled to\n-5 degrees overnight.\n", id="paragraph_runs_on_to_a_line_starting_with_a_negative_number"),
+    pytest.param("The build got faster by\n1.5 times this week.\n", id="paragraph_runs_on_to_a_line_starting_with_a_decimal"),
 ])
 def test_hard_wraps(text):
     assert hard_wraps(text)
@@ -44,6 +49,8 @@ def test_hard_wraps(text):
     pytest.param("1) First step.\n2) Second step.\n", id="parenthesis_numbered_list_items"),
     pytest.param("* one item\n* another item\n", id="asterisk_list_items"),
     pytest.param("+ one item\n+ another item\n", id="plus_list_items"),
+    pytest.param("Steps:\n-\tone item\n1)\tanother item\n", id="list_items_with_a_tab_after_the_mark"),
+    pytest.param("1. First step.\n2.\n-\n3. Third step.\n", id="empty_list_items"),
     pytest.param("## Install\nRun the installer.\n", id="paragraph_right_under_heading"),
     pytest.param("Run the installer.\n## Usage\n", id="heading_right_under_paragraph"),
     pytest.param("Title\n=====\n\nUsage\n-----\nRun the installer.\n", id="underlined_headings"),
@@ -58,6 +65,8 @@ def test_hard_wraps(text):
     pytest.param('```yaml\ndescription: |\n    ```json\n    {"files": []}\n    ```\nactiveForm: Implementing\nstatus: open\n```\n', id="fence_indented_four_spaces_more_inside_fence"),
     pytest.param("---\nname: rules\ndescription: Hooks that enforce rules.\n---\n\nThe body.\n", id="front_matter"),
     pytest.param("---\r\nname: rules\r\ndescription: Hooks that enforce rules.\r\n---\r\n\r\nThe body.\r\n", id="front_matter_with_crlf"),
+    pytest.param("---\nText right under a rule line that opens the file.\n", id="paragraph_right_under_a_rule_line_that_opens_the_file"),
+    pytest.param('+++\ntitle = "Rules"\ndate = 2026-11-12\n+++\n\nThe body.\n', id="toml_front_matter"),
     pytest.param('<p align="center">\n  <img src="logo.png" alt="Logo">\n</p>\n', id="html_block"),
     pytest.param("<!-- markdownlint-disable -->\nText right under a comment.\n", id="paragraph_right_under_html_comment"),
     pytest.param("<!--\nNotes for maintainers,\nkept on two lines.\n-->\nText right under the comment.\n", id="multi_line_html_comment"),
@@ -72,8 +81,9 @@ def test_main_blocks_write_of_wrapped_markdown(tmp_path):
     assert main(write_call(tmp_path / "README.md", WRAPPED), io.StringIO()) == 2
 
 
-def test_main_blocks_write_of_wrapped_markdown_with_long_extension(tmp_path):
-    assert main(write_call(tmp_path / "README.markdown", WRAPPED), io.StringIO()) == 2
+@pytest.mark.parametrize("name", ["README.markdown", "README.MD", "notes.Markdown"])
+def test_main_blocks_write_of_wrapped_markdown_whatever_the_extension_and_its_case(tmp_path, name):
+    assert main(write_call(tmp_path / name, WRAPPED), io.StringIO()) == 2
 
 
 def test_the_script_run_as_a_hook_blocks_write_of_wrapped_markdown(tmp_path):
@@ -83,7 +93,7 @@ def test_the_script_run_as_a_hook_blocks_write_of_wrapped_markdown(tmp_path):
 
 
 def test_the_script_reads_the_call_and_the_file_as_utf8_under_an_ascii_locale(tmp_path):
-    """Claude Code sends the call in UTF-8, and the file is UTF-8, but outside UTF-8 mode Python 3.9 to 3.14 decode stdin and files in the locale's encoding."""
+    """Claude Code sends the call in UTF-8, and the file is UTF-8, but outside UTF-8 mode Python decodes stdin and files in the locale's encoding."""
     readme = tmp_path / "README.md"
     readme.write_text("The café is open.\n", encoding="utf-8")
     call = edit_call(readme, "The café is open.", "The café is open,\nuntil this edit wraps it.").getvalue().encode("utf-8")
@@ -159,6 +169,17 @@ def test_main_blocks_edit_that_deletes_a_line_between_two_paragraph_lines(tmp_pa
     readme = tmp_path / "README.md"
     readme.write_text("First paragraph on one line.\n<!-- a note between the paragraphs -->\nSecond paragraph on one line.\n")
     assert main(edit_call(readme, "<!-- a note between the paragraphs -->", ""), io.StringIO()) == 2
+
+
+@pytest.mark.parametrize("data", [
+    pytest.param("﻿This paragraph is on one line.\n".encode("utf-16-le"), id="utf_16_after_its_byte_order_mark"),
+    pytest.param("The café paragraph is on one line.\n".encode("latin-1"), id="bytes_that_are_not_utf_8"),
+])
+def test_main_blocks_edit_that_wraps_a_file_that_is_not_utf_8(tmp_path, data):
+    """Edit reads a file that starts with the UTF-16 little-endian byte order mark as UTF-16, and any other as UTF-8 with what does not decode replaced."""
+    readme = tmp_path / "README.md"
+    readme.write_bytes(data)
+    assert main(edit_call(readme, "on one line.", "on one line, until\nthis edit wraps it."), io.StringIO()) == 2
 
 
 def test_main_blocks_edit_that_creates_a_wrapped_file(tmp_path):

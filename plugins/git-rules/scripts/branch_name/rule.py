@@ -19,7 +19,9 @@ OPERATOR_CHARACTERS = "();<>|&\n"
 REDIRECTION = r"&?[<>]+[&|]?"
 GIT_OPTIONS_WITH_VALUE = ("-c", "-C")
 # shortcut: --orphan, and git branch with -f or --track, are not checked; add them if Claude creates branches that way
-CREATE_OPTIONS = {"checkout": ("-b", "-B"), "switch": ("-c", "-C", "--create"), "worktree": ("-b", "-B")}
+CREATE_OPTIONS = {"checkout": ("-b", "-B"), "switch": ("-c", "-C", "--create", "--force-create"), "worktree": ("-b", "-B")}
+# Without these options, gh pr checkout names the local branch after the pull request's own, and gh issue develop the remote one after the issue.
+GH_CREATE_OPTIONS = {("pr", "checkout"): ("-b", "--branch"), ("issue", "develop"): ("-n", "--name")}
 # gh-pages is the branch GitHub Pages and the tools that publish to it name, not Claude.
 CONVENTIONAL = r"main|master|develop|gh-pages|(?:feature|feat|bugfix|fix|hotfix|chore)/[a-z0-9]+(?:-[a-z0-9]+)*|release/[a-z0-9]+(?:[-.][a-z0-9]+)*"
 NAMING = (
@@ -70,7 +72,8 @@ def new_branch_names(cmd):
         commands = simple_commands(cmd)
     except ValueError:  # an unbalanced quote, such as an apostrophe in a heredoc body, leaves no words to read
         return []
-    return [name for words in commands for name in command_branch_names(words)]
+    # The shell expands $ and backticks after this check reads the command, so a name holding one is left to the pre-push check.
+    return [name for words in commands for name in command_branch_names(words) if "$" not in name and "`" not in name]
 
 
 def command_branch_names(words):
@@ -79,9 +82,8 @@ def command_branch_names(words):
         words = words[1:]
     program = os.path.basename(words[0]) if words else ""
     if program == "gh":
-        # Without -b or --branch, gh names the branch after the pull request's own branch, which is not Claude's choice.
         # shortcut: the alias gh pr co is not checked; add it if Claude checks out pull requests that way
-        return option_values(words[3:], ("-b", "--branch")) if words[1:3] == ["pr", "checkout"] else []
+        return option_values(words[3:], GH_CREATE_OPTIONS.get(tuple(words[1:3]), ()))
     if program != "git":
         return []
     words = words[1:]

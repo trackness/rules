@@ -21,6 +21,13 @@ def test_main_blocks_write_to_existing_file(tmp_path):
     assert main(tool_call(existing), io.StringIO()) == 2
 
 
+def test_main_blocks_write_to_existing_empty_file(tmp_path):
+    """Edit with an empty old_string fills an empty file, so Write is not needed for it."""
+    existing = tmp_path / "notes.md"
+    existing.touch()
+    assert main(tool_call(existing), io.StringIO()) == 2
+
+
 def test_main_allows_write_to_new_file(tmp_path):
     assert main(tool_call(tmp_path / "notes.md"), io.StringIO()) == 0
 
@@ -42,7 +49,7 @@ def test_the_script_run_as_a_hook_blocks_write_to_existing_file(tmp_path):
 
 
 def test_the_script_reads_a_non_ascii_path_as_utf8_whatever_the_locale(tmp_path):
-    """Python decodes stdin with the locale's encoding, so the script must read the bytes itself; Latin-1 stands in for a locale."""
+    """Python decodes stdin in PYTHONIOENCODING when it is set, here Latin-1, so the script reads the bytes itself."""
     existing = tmp_path / "café.md"
     existing.write_text("old text\n")
     env = {"PATH": os.environ["PATH"], "PYTHONIOENCODING": "latin-1"}
