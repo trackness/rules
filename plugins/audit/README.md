@@ -12,7 +12,7 @@ Invoke a skill with the files, folder or layer in scope, such as `/audit:code pl
 
 ## Requirements
 
-All three skills need a session that can start subagents with the `Agent` tool. The code audit and the architecture review also need the `ponytail` plugin installed: the code audit loads its `ponytail:ponytail-audit` skill and the architecture review its `ponytail:ponytail` skill. Without either, they say what is missing and stop.
+The plugin requires Claude Code 2.1.322 or later, on macOS or Linux. All three skills need a session that can start subagents with the `Agent` tool. The code audit and the architecture review also need the `ponytail` plugin installed: the code audit loads its `ponytail:ponytail-audit` skill and the architecture review its `ponytail:ponytail` skill. Without either, they say what is missing and stop.
 
 ## Install
 
