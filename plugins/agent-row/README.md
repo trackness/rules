@@ -38,7 +38,7 @@ Explore          haiku-4.5   Count files by extension          Counting files un
 
 ## Requirements
 
-Claude Code 2.1.322 or later, on macOS or Linux, with Python 3.15 or later as the `python3` on the `PATH`. The script uses only Python's standard library.
+Claude Code 2.1.322 or later, on macOS or Linux. The script runs with the `python3` on the `PATH` and uses only its standard library.
 
 ## Install
 

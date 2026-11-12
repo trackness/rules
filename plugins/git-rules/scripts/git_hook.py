@@ -2,7 +2,6 @@
 import re
 import shlex
 import subprocess
-import sys
 
 MINIMUM_GIT_VERSION = (2, 54, 0)  # the first release with hooks defined in config
 
@@ -20,15 +19,11 @@ def git_version():
 def register(env_file, stdout, name, event, command, check):
     """Register command, a list of words, as git's hook for event under the name name, in the Bash commands of the session that owns env_file.
 
-    With no env_file, a Python before 3.15, or no git of MINIMUM_GIT_VERSION or later, tell Claude instead that check, such as "The Conventional Commits check", is not active.
+    With no env_file, or no git of MINIMUM_GIT_VERSION or later, tell Claude instead that check, such as "The Conventional Commits check", is not active.
     """
     # Claude Code adds a SessionStart hook's stdout to Claude's context; Claude never sees its stderr.
     if not env_file:
         print(f"{check} is not active: Claude Code gave this hook no CLAUDE_ENV_FILE to register it in.", file=stdout)
-        return
-    if sys.version_info < (3, 15):  # the rules are built and tested on Python 3.15 or later
-        found = ".".join(map(str, sys.version_info[:3]))
-        print(f"{check} is not active: the git-rules plugin requires Python 3.15 or later, and found Python {found}.", file=stdout)
         return
     version = git_version()
     if version < MINIMUM_GIT_VERSION:  # an older git ignores the registration, so the check would silently never run

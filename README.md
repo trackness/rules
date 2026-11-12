@@ -15,7 +15,7 @@ Each `claude plugin install` copies only that plugin's folder, such as `plugins/
 
 ## Requirements
 
-macOS or Linux, Claude Code 2.1.322 or later, and Python 3.15 or later as the `python3` on the `PATH`. The `git-rules` plugin also needs git 2.54.0 or later.
+macOS or Linux, Claude Code 2.1.322 or later, and Python 3.9 or later as the `python3` on the `PATH`. The `git-rules` plugin also needs git 2.54.0 or later.
 
 ## Test
 
