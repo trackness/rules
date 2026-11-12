@@ -83,7 +83,7 @@ def test_the_script_run_as_a_hook_blocks_write_of_wrapped_markdown(tmp_path):
 
 
 def test_the_script_reads_the_call_and_the_file_as_utf8_under_an_ascii_locale(tmp_path):
-    """Claude Code sends the call in UTF-8, and the file is UTF-8, but outside UTF-8 mode Python 3.9 to 3.14 decode stdin and files in the locale's encoding."""
+    """Claude Code sends the call in UTF-8, and the file is UTF-8, but outside UTF-8 mode Python decodes stdin and files in the locale's encoding."""
     readme = tmp_path / "README.md"
     readme.write_text("The café is open.\n", encoding="utf-8")
     call = edit_call(readme, "The café is open.", "The café is open,\nuntil this edit wraps it.").getvalue().encode("utf-8")

@@ -145,7 +145,7 @@ def test_the_script_run_as_a_hook_blocks_a_chained_command():
 
 
 def test_the_script_reads_utf_8_whatever_the_locale():
-    """Claude Code sends UTF-8; PYTHONIOENCODING stands in for a locale whose encoding is not UTF-8, which Python 3.9 to 3.14 decode stdin with."""
+    """Claude Code sends UTF-8, while Python decodes stdin in PYTHONIOENCODING when it is set, here ASCII."""
     call = json.dumps({"tool_name": "Bash", "tool_input": {"command": "echo café && ls"}}, ensure_ascii=False).encode()
     env = {"PATH": os.environ["PATH"], "PYTHONIOENCODING": "ascii:strict"}
     result = subprocess.run([SCRIPT], input=call, capture_output=True, env=env)

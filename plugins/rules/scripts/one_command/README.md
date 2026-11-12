@@ -1,6 +1,6 @@
 # One command per Bash call
 
-Blocks a Bash call that chains commands with `;`, `&&`, `||`, `|`, `&` or a newline, and, from Claude Code 2.1.314, a Monitor command that does, with this message:
+Blocks a Bash or Monitor command that chains commands with `;`, `&&`, `||`, `|`, `&` or a newline, with this message:
 
 > Blocked: one command per Bash or Monitor call. Find a single command or tool that does the whole job. Only if there isn't one, send the commands as separate calls.
 
