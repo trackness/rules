@@ -1,15 +1,14 @@
 """Tests for "Conventional Branch names". Run from the repo root: uv run pytest"""
 import io
 import json
-import os
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from ..git_testing import git, needs_config_hooks, needs_zsh, run_in_session
-from .rule import conventional, main, new_branch_names
+from ..git_testing import GIT_ENV, git, needs_config_hooks, needs_zsh, run_in_session
+from .rule import NAMING, conventional, main, new_branch_names
 
 SCRIPT = Path(__file__).resolve().parent / "rule.py"
 
@@ -45,6 +44,10 @@ def git_in_session(tmp_path, repo, *args, shell="bash", script=SCRIPT):
     pytest.param("feature/Add-Login-Page", id="uppercase"),
     pytest.param("feature/add-login-", id="trailing_hyphen"),
     pytest.param("feature/upgrade-python-3.15", id="dot_outside_release"),
+    pytest.param("release/v1..2", id="two_dots_in_a_row"),
+    pytest.param("feature/new--login", id="two_hyphens_in_a_row"),
+    pytest.param("feature/-new-login", id="leading_hyphen"),
+    pytest.param("feature/auth/login", id="slash_in_description"),
 ])
 def test_not_conventional(name):
     assert not conventional(name)
@@ -73,6 +76,7 @@ def test_conventional(name):
     pytest.param("git switch -c Add_Login", ["Add_Login"], id="switch_c"),
     pytest.param("git switch -C Add_Login", ["Add_Login"], id="switch_force_c"),
     pytest.param("git switch --create Add_Login", ["Add_Login"], id="switch_create"),
+    pytest.param("git switch --force-create Add_Login", ["Add_Login"], id="switch_force_create"),
     pytest.param("git -c color.ui=never log -1", [], id="git_config_option"),
     pytest.param("git -C /repo checkout -b Add_Login", ["Add_Login"], id="git_directory_option"),
     pytest.param("git worktree add -b Add_Login ../add-login", ["Add_Login"], id="worktree_add_b"),
@@ -86,27 +90,33 @@ def test_conventional(name):
     pytest.param("/usr/bin/git checkout -b Add_Login", ["Add_Login"], id="git_by_full_path"),
     pytest.param("GIT_TRACE=1 git checkout -b Add_Login", ["Add_Login"], id="environment_assignment"),
     pytest.param("env GIT_TRACE=1 git checkout -b Add_Login", ["Add_Login"], id="env"),
-    pytest.param("git push origin HEAD:Add_Login", ["Add_Login"], id="push_refspec"),
-    pytest.param("git push -u origin local-name:refs/heads/Add_Login", ["Add_Login"], id="push_refspec_full_ref"),
-    pytest.param("git push origin :Add_Login", [], id="push_delete"),
-    pytest.param("git push -u origin Add_Login", [], id="push_without_colon"),
-    pytest.param("git push origin V1.0:refs/tags/V1.0", [], id="push_tag"),
-    pytest.param("git push git@github.com:trackness/rules.git HEAD:Add_Login", ["Add_Login"], id="push_to_url"),
-    pytest.param("git push --force-with-lease=feature/add-login:4f2a9c1 origin feature/add-login", [], id="push_force_with_lease"),
-    pytest.param("git push -o ci.skip git@github.com:trackness/rules.git HEAD:Add_Login", ["Add_Login"], id="push_option_short"),
-    pytest.param("git push --push-option ci.skip git@github.com:trackness/rules.git feature/add-login", [], id="push_option_long"),
-    pytest.param("git push --recurse-submodules check git@github.com:trackness/rules.git feature/add-login", [], id="push_recurse_submodules"),
-    pytest.param("git push --receive-pack /opt/git/bin/git-receive-pack git@example.com:repo.git feature/add-login", [], id="push_receive_pack"),
-    pytest.param("git push --exec /opt/git/bin/git-receive-pack git@example.com:repo.git feature/add-login", [], id="push_exec"),
-    pytest.param("git push backup 'refs/heads/*:refs/heads/*'", [], id="push_pattern"),
     pytest.param("gh pr checkout 5 -b Add_Login", ["Add_Login"], id="gh_pr_checkout_b"),
     pytest.param("gh pr checkout 5 --branch Add_Login", ["Add_Login"], id="gh_pr_checkout_branch"),
     pytest.param("gh pr checkout 5", [], id="gh_pr_checkout_own_branch"),
+    pytest.param("gh issue develop 12 -n Add_Login", ["Add_Login"], id="gh_issue_develop_n"),
+    pytest.param("gh issue develop 12 --base main --name Add_Login --checkout", ["Add_Login"], id="gh_issue_develop_name"),
     pytest.param("ls -la", [], id="not_git"),
     pytest.param("git --version", [], id="git_without_subcommand"),
     pytest.param("cat > notes.txt <<'EOF'\nDon't stop.\nEOF", [], id="unbalanced_quote_in_heredoc"),
     pytest.param("/usr/bin/gh pr checkout 5 -b Add_Login", ["Add_Login"], id="gh_by_full_path"),
     pytest.param("git --git-dir=/repo/.git checkout -b Add_Login", ["Add_Login"], id="git_option_as_one_word"),
+    pytest.param("cd /repo && git checkout -b Add_Login", ["Add_Login"], id="after_and"),
+    pytest.param("git status; git checkout -b Add_Login", ["Add_Login"], id="after_semicolon"),
+    pytest.param("git status\ngit checkout -b Add_Login", ["Add_Login"], id="on_a_second_line"),
+    pytest.param("(git checkout -b Add_Login)", ["Add_Login"], id="in_a_subshell"),
+    pytest.param("git branch -m Add_Login && git checkout main", ["Add_Login"], id="rename_before_another_command"),
+    pytest.param("git checkout \\\n  -b Add_Login", ["Add_Login"], id="continued_on_the_next_line"),
+    pytest.param("git checkout 2>/dev/null -b Add_Login", ["Add_Login"], id="options_after_a_redirection"),
+    pytest.param("# make the branch\ngit checkout -b Add_Login", ["Add_Login"], id="after_a_comment_line"),
+    pytest.param("git branch 2>&1", [], id="branch_list_redirected_to_a_file_descriptor"),
+    pytest.param("git branch > branches.txt", [], id="branch_list_redirected_to_a_file"),
+    pytest.param("git branch | grep feature", [], id="branch_list_piped"),
+    pytest.param("git branch -D old && git commit -m 'feat: thing'", [], id="option_of_a_later_command"),
+    pytest.param("git checkout main && gh pr create -B main -b 'Fixes the bug'", [], id="gh_option_of_a_later_command"),
+    pytest.param("git checkout -b feature/add-login # the -b flag makes it", ["feature/add-login"], id="comment_after_the_command"),
+    pytest.param("git checkout -b feature/add-login # made here\ngit branch Add_Login", ["feature/add-login", "Add_Login"], id="line_after_a_comment"),
+    # A limit the README lists: a line of a heredoc's body is read as a command, even with the delimiter quoted.
+    pytest.param("cat <<'EOF'\ngit branch Add_Login\nEOF", ["Add_Login"], id="line_in_a_heredoc"),
     # Not read, as the README lists: a push through Claude's Bash commands still meets the pre-push check.
     pytest.param("git checkout --orphan Add_Login", [], id="unread_checkout_orphan"),
     pytest.param("git switch --orphan Add_Login", [], id="unread_switch_orphan"),
@@ -127,9 +137,16 @@ def test_conventional(name):
     pytest.param("git --git-dir /repo/.git checkout -b Add_Login", [], id="unread_git_option_value_as_next_word"),
     pytest.param("git co -b Add_Login", [], id="unread_git_alias"),
     pytest.param("gh pr co 5 -b Add_Login", [], id="unread_gh_alias"),
+    pytest.param("gh issue develop 12", [], id="unread_gh_issue_develop_named_after_the_issue"),
+    pytest.param("gh api repos/owner/repo/git/refs -f ref=refs/heads/Add_Login -f sha=4444", [], id="unread_gh_api"),
     pytest.param("sudo -u root git checkout -b Add_Login", [], id="unread_sudo_option"),
     pytest.param("bash -c 'git checkout -b Add_Login'", [], id="unread_bash_c"),
     pytest.param("xargs git checkout -b Add_Login", [], id="unread_xargs"),
+    pytest.param("git commit -m '#12 fix' && git checkout -b Add_Login", [], id="unread_after_a_quoted_word_starting_with_hash"),
+    pytest.param("if true; then git checkout -b Add_Login; fi", [], id="unread_after_a_shell_keyword"),
+    pytest.param('git checkout -b "feature/$TICKET"', [], id="unread_name_holding_a_variable"),
+    pytest.param("git switch -c $(cat name.txt)", [], id="unread_name_from_a_command_substitution"),
+    pytest.param("git branch feature/`date +%s`", [], id="unread_name_holding_a_backtick"),
 ])
 def test_new_branch_names(cmd, names):
     assert new_branch_names(cmd) == names
@@ -148,10 +165,30 @@ def test_main_allows_gh_pages_branch():
     assert main(tool_call("git checkout -b gh-pages"), io.StringIO(), io.StringIO()) == 0
 
 
+@pytest.mark.parametrize("cmd", [
+    pytest.param("git push origin HEAD:Bad_Name", id="new_branch_by_refspec"),
+    pytest.param("git push -u origin local-name:refs/heads/Add_Login", id="new_branch_by_full_ref"),
+    pytest.param("git push origin HEAD:dependabot/npm_and_yarn/lodash-4.17.21", id="existing_branch_by_refspec"),
+    pytest.param("git push origin v1.2.0:v1.2.0", id="tag_by_refspec"),
+    pytest.param("git push origin +:Add_Login", id="forced_deletion"),
+    pytest.param("git push --repo origin git@github.com:Owner/Repo.git", id="repository_after_repo_option"),
+])
+def test_main_leaves_every_push_to_the_pre_push_check(cmd):
+    """Only git sees whether the remote branch already exists, so the registered hook, tested below, judges pushes."""
+    assert main(tool_call(cmd), io.StringIO(), io.StringIO()) == 0
+
+
 def test_main_block_gives_a_reason():
     stderr = io.StringIO()
     main(tool_call("git checkout -b Add_Login"), io.StringIO(), stderr)
-    assert "Blocked: branch name Add_Login does not follow Conventional Branch 1.0.0." in stderr.getvalue()
+    assert stderr.getvalue() == f"Blocked: branch name Add_Login does not follow Conventional Branch 1.0.0. {NAMING}\n"
+
+
+def test_script_reads_its_input_as_utf_8_whatever_pythonioencoding_says():
+    """Claude Code sends UTF-8, which Python would decode with the encoding PYTHONIOENCODING names, here ASCII, and fail with exit 1, which blocks nothing."""
+    hook_input = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git checkout -b Café"}}, ensure_ascii=False)
+    result = subprocess.run([SCRIPT], input=hook_input.encode(), env={**GIT_ENV, "PYTHONIOENCODING": "ascii"}, capture_output=True)
+    assert result.returncode == 2, result.stderr
 
 
 @needs_config_hooks
@@ -286,10 +323,12 @@ def test_ways_past_the_pre_push_check_the_readme_lists(tmp_path, command):
 
 
 @needs_config_hooks
-def test_registered_hook_allows_pushing_a_tag(tmp_path):
+@pytest.mark.parametrize("refspec", [pytest.param("V1.0", id="by_name"), pytest.param("V1.0:V1.0", id="by_refspec")])
+def test_registered_hook_allows_pushing_a_tag(tmp_path, refspec):
+    """git takes the <dst> of V1.0:V1.0 as a tag, since its <src> is one."""
     repo, remote = repo_with_remote(tmp_path)
     git("-C", repo, "tag", "V1.0")
-    assert git_in_session(tmp_path, repo, "push", "-q", "origin", "V1.0").returncode == 0
+    assert git_in_session(tmp_path, repo, "push", "-q", "origin", refspec).returncode == 0
     assert git("-C", remote, "tag").split() == ["V1.0"]
 
 
@@ -310,11 +349,11 @@ def test_pre_push_reads_a_local_ref_typed_with_spaces(tmp_path):
 
 
 def test_session_start_without_env_file_tells_claude_the_push_check_is_inactive():
-    """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook.
+    """A SessionStart hook run without a CLAUDE_ENV_FILE has nowhere to register the git hook.
 
     Claude Code adds a SessionStart hook's stdout at exit 0 to Claude's context; Claude never sees its stderr.
     """
-    env = {name: value for name, value in os.environ.items() if name != "CLAUDE_ENV_FILE"}
+    env = {name: value for name, value in GIT_ENV.items() if name != "CLAUDE_ENV_FILE"}
     result = subprocess.run([SCRIPT], input=json.dumps({"hook_event_name": "SessionStart", "source": "startup"}), env=env, capture_output=True, text=True)
     assert result.returncode == 0
     assert len(result.stdout.splitlines()) == 1 and "not active" in result.stdout

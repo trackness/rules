@@ -1,0 +1,19 @@
+---
+name: code-fix
+description: Fix run for the findings of the exhaustive code audit. Starts from the untracked AUDIT-FINDINGS.md that /audit:code leaves at the repo root, triages its findings, and has one subagent per group of files fix them test-first, each in its own worktree and branch, then merges the branches into one local branch and runs every suite on it. Use when asked to fix what /audit:code found.
+disable-model-invocation: true
+---
+
+Audience: Claude Code. Invoke with `/audit:code-fix` in the repo whose root holds `AUDIT-FINDINGS.md`, the findings file `/audit:code` leaves.
+
+You orchestrate; the agents change the code, on local branches. Without my word, do not push, open a pull request, or merge into the default branch.
+
+The findings file is the handoff to every agent and to any later run: keep it untracked, current and able to stand alone, with a row for every finding. It is no record: no log, no dates, no account of what was changed, removed or renamed, no history of how a rule was learned. What now lives elsewhere (the code, a README, a skill) may be removed from it. It holds the groups (number, name, files owned, findings), each finding's group, the fix notes per group and the agents' working rules, so each prompt names only its group.
+
+1. **Triage first.** Leave out invented problems, hyper-edge cases, wording-only and display-only items, and old platforms: prefer one stated, enforced requirement, such as a minimum version, to partial support, and mark the rows beyond it ➖. Mark what you leave out ⏸️ parked, with its fix.
+2. **The right fix, not the smallest patch.** Before fixing a row, ask whether the code it patches should exist, and read its history for why it is there. An agent given a design change first looks for a reason not to make it, and stops and reports if it finds one.
+3. **Groups are sets of files, not topics.** Each group owns files no other group edits; files several groups would need are off limits to all. Fixes to the same pattern go to one agent, made one at a time, with the whole test file run after each.
+4. **One agent per group**, on a model chosen by how hard the group is, in its own worktree and branch, cut from the branch that holds the work so far. Its rules: run `git rev-parse --show-toplevel` first and stop if it prints the main checkout; for each fix, first a test that fails on the old code, then the smallest change that passes it, then the whole suite as CI runs it; commit by path, without pushing; report ✅ done, ⚠️ partly or ❌ not done per finding; never print the environment, never run a test suite with `GIT_DIR` set, start no live interactive session, write scratch files only in the scratchpad folder, and treat a block from an installed hook as evidence, not something to work around. Send back an agent whose test could not fail.
+5. **Known traps.** If a guard refuses a git command because its branch name or message holds the word git, keep the word out of branch names and commit with `-F <file>`. A worktree whose agent finishes with no changes is removed at once: launch a fresh agent rather than resume it. A hook that blocks edits on the default branch also blocks editing the findings file there: edit it from a throwaway branch, then delete that branch.
+6. **Integration.** Merge every group branch into one local branch in one merge, then run every suite on it yourself. Cut later work from that branch, and fast-forward it back with `git fetch . <src>:<dst>` once you have read the diff. Check `git branch --merged` yourself, then delete the merged branches and their worktrees, ending with one branch.
+7. **After the fixes**, run every parked row against the merged code again, and reword any recorded fix that the moved code has made wrong.

@@ -14,10 +14,14 @@ import git_hook
 # shortcut: git after sudo or env options, such as sudo -u root git, is not checked; skip those options if Claude runs git that way
 COMMAND_PREFIXES = ("sudo", "env")
 ENVIRONMENT_ASSIGNMENT = r"[A-Za-z_]\w*="
+# A word made only of these characters ends a simple command, such as && or a newline, or is a redirection, such as > or the >& of 2>&1.
+OPERATOR_CHARACTERS = "();<>|&\n"
+REDIRECTION = r"&?[<>]+[&|]?"
 GIT_OPTIONS_WITH_VALUE = ("-c", "-C")
-PUSH_OPTIONS_WITH_VALUE = ("-o", "--push-option", "--recurse-submodules", "--receive-pack", "--exec")
 # shortcut: --orphan, and git branch with -f or --track, are not checked; add them if Claude creates branches that way
-CREATE_OPTIONS = {"checkout": ("-b", "-B"), "switch": ("-c", "-C", "--create"), "worktree": ("-b", "-B")}
+CREATE_OPTIONS = {"checkout": ("-b", "-B"), "switch": ("-c", "-C", "--create", "--force-create"), "worktree": ("-b", "-B")}
+# Without these options, gh pr checkout names the local branch after the pull request's own, and gh issue develop the remote one after the issue.
+GH_CREATE_OPTIONS = {("pr", "checkout"): ("-b", "--branch"), ("issue", "develop"): ("-n", "--name")}
 # gh-pages is the branch GitHub Pages and the tools that publish to it name, not Claude.
 CONVENTIONAL = r"main|master|develop|gh-pages|(?:feature|feat|bugfix|fix|hotfix|chore)/[a-z0-9]+(?:-[a-z0-9]+)*|release/[a-z0-9]+(?:[-.][a-z0-9]+)*"
 NAMING = (
@@ -37,19 +41,49 @@ def option_values(args, options):
     return [args[i + 1] for i, arg in enumerate(args[:-1]) if arg in options]
 
 
+# shortcut: a line of a heredoc's body is read as a command, and a quoted word that starts with # as the start of a comment; parse quotes as the shell does if either misreads Claude's commands
+def simple_commands(cmd):
+    """The words of each simple command in the shell command cmd, without redirections and comments; raises ValueError on an unbalanced quote."""
+    # A backslash before a newline joins the two lines, where shlex would keep the newline as a word.
+    lexer = shlex.shlex(cmd.replace("\\\n", ""), posix=True, punctuation_chars=OPERATOR_CHARACTERS)
+    # A newline ends a command, and # starts a comment only as the first character of a word, which shlex's own comments do not check.
+    lexer.whitespace, lexer.whitespace_split, lexer.commenters = " \t\r", True, ""
+    tokens = iter(lexer)
+    commands = [[]]
+    for token in tokens:
+        if token.startswith("#"):
+            next((rest for rest in tokens if rest == "\n"), None)
+            commands.append([])
+        elif not token or set(token) - set(OPERATOR_CHARACTERS):
+            commands[-1].append(token)
+        elif re.fullmatch(REDIRECTION, token):
+            # Neither the file a redirection names nor the file descriptor before it, the 2 of 2>&1, is a word of the command.
+            if commands[-1] and commands[-1][-1].isdigit():
+                commands[-1].pop()
+            next(tokens, None)
+        else:
+            commands.append([])
+    return commands
+
+
 def new_branch_names(cmd):
-    """The names of the branches the shell command cmd creates, renames a branch to, or pushes to by a <src>:<dst> refspec."""
+    """The names of the branches the shell command cmd creates or renames a branch to."""
     try:
-        words = shlex.split(cmd)
+        commands = simple_commands(cmd)
     except ValueError:  # an unbalanced quote, such as an apostrophe in a heredoc body, leaves no words to read
         return []
+    # The shell expands $ and backticks after this check reads the command, so a name holding one is left to the pre-push check.
+    return [name for words in commands for name in command_branch_names(words) if "$" not in name and "`" not in name]
+
+
+def command_branch_names(words):
+    """The names of the branches the simple command with these words creates or renames a branch to."""
     while words and (words[0] in COMMAND_PREFIXES or re.match(ENVIRONMENT_ASSIGNMENT, words[0])):
         words = words[1:]
     program = os.path.basename(words[0]) if words else ""
     if program == "gh":
-        # Without -b or --branch, gh names the branch after the pull request's own branch, which is not Claude's choice.
         # shortcut: the alias gh pr co is not checked; add it if Claude checks out pull requests that way
-        return option_values(words[3:], ("-b", "--branch")) if words[1:3] == ["pr", "checkout"] else []
+        return option_values(words[3:], GH_CREATE_OPTIONS.get(tuple(words[1:3]), ()))
     if program != "git":
         return []
     words = words[1:]
@@ -63,16 +97,7 @@ def new_branch_names(cmd):
         if "-m" in args or "-M" in args:
             return names[-1:]
         return [] if any(arg.startswith("-") for arg in args) else args[:1]
-    if subcommand == "push":
-        # The word after an option that takes a value is that value; of the other words, git takes the first as the repository, even with --repo.
-        repository_and_refspecs = [
-            arg for previous, arg in zip([None, *args], args) if not arg.startswith("-") and previous not in PUSH_OPTIONS_WITH_VALUE
-        ]
-        refspecs = [arg.partition(":") for arg in repository_and_refspecs[1:]]
-        # An empty <src> deletes <dst>, which must stay possible for a badly named branch.
-        destinations = [dst.removeprefix("refs/heads/") for src, colon, dst in refspecs if src and colon]
-        # A ref outside refs/heads/, such as a tag, is not a branch, and a pattern with * stands for many existing names.
-        return [dst for dst in destinations if not dst.startswith("refs/") and "*" not in dst]
+    # A push is left to the pre-push hook: only git sees whether the remote branch already exists, and an update of one, or a tag, must go through.
     return option_values(args, CREATE_OPTIONS.get(subcommand, ()))
 
 
@@ -114,7 +139,7 @@ def main(stdin, stdout, stderr, env_file=None):
     """Read the Claude Code hook's input from stdin and return Claude Code's exit code.
 
     At SessionStart, register this script as git's pre-push hook in env_file.
-    A Bash call that creates, renames or pushes to a branch with a name that isn't Conventional Branch gets a reason on stderr and 2, which blocks it;
+    A Bash call that creates or renames a branch with a name that isn't Conventional Branch gets a reason on stderr and 2, which blocks it;
     anything else gets 0.
     """
     hook_input = json.load(stdin)
@@ -130,4 +155,4 @@ def main(stdin, stdout, stderr, env_file=None):
 
 if __name__ == "__main__":
     # git runs this script as its pre-push hook with the argument pre-push, then the remote's name and URL; Claude Code runs it with no arguments
-    sys.exit(pre_push(sys.stdin, sys.stderr) if sys.argv[1:2] == ["pre-push"] else main(sys.stdin, sys.stdout, sys.stderr, os.environ.get("CLAUDE_ENV_FILE")))
+    sys.exit(pre_push(sys.stdin, sys.stderr) if sys.argv[1:2] == ["pre-push"] else main(sys.stdin.buffer, sys.stdout, sys.stderr, os.environ.get("CLAUDE_ENV_FILE")))

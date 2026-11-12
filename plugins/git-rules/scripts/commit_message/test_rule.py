@@ -1,13 +1,12 @@
 """Tests for "Conventional Commits messages". Run from the repo root: uv run pytest"""
 import io
-import os
 import shutil
 import subprocess
 from pathlib import Path
 
 import pytest
 
-from ..git_testing import git, needs_config_hooks, needs_zsh, run_in_session
+from ..git_testing import GIT_ENV, git, needs_config_hooks, needs_zsh, run_in_session
 from .rule import conventional, main
 
 SCRIPT = Path(__file__).resolve().parent / "rule.py"
@@ -47,6 +46,7 @@ def message_file(tmp_path, message):
     pytest.param("feat: ", id="no_description"),
     pytest.param("fix: handle empty input\nThe body starts right under the header.", id="body_without_blank_line"),
     pytest.param("fixup! Add login page\n\n", id="fixup_of_unconventional_commit"),
+    pytest.param("WIP feat: add login page", id="type_not_at_the_start"),
 ])
 def test_not_conventional(message):
     assert not conventional(message)
@@ -73,6 +73,13 @@ def test_main_rejects_unconventional_message(tmp_path):
 
 def test_main_accepts_conventional_message(tmp_path):
     assert main(message_file(tmp_path, "feat: add login page\n"), io.StringIO()) == 0
+
+
+def test_main_reads_a_message_that_is_not_utf8(tmp_path):
+    """git does not re-encode the message: with i18n.commitEncoding set it arrives in that encoding, here Latin-1."""
+    path = tmp_path / "COMMIT_EDITMSG"
+    path.write_bytes("feat: add café page\n".encode("latin-1"))
+    assert main(str(path), io.StringIO()) == 0
 
 
 def test_main_rejection_gives_a_reason(tmp_path):
@@ -147,11 +154,11 @@ def test_ways_past_the_commit_msg_check_the_readme_lists(tmp_path, command):
 
 
 def test_session_start_without_env_file_tells_claude_the_check_is_inactive():
-    """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook.
+    """A SessionStart hook run without a CLAUDE_ENV_FILE has nowhere to register the git hook.
 
     Claude Code adds a SessionStart hook's stdout at exit 0 to Claude's context; Claude never sees its stderr.
     """
-    env = {name: value for name, value in os.environ.items() if name != "CLAUDE_ENV_FILE"}
+    env = {name: value for name, value in GIT_ENV.items() if name != "CLAUDE_ENV_FILE"}
     result = subprocess.run([SCRIPT], env=env, capture_output=True, text=True)
     assert result.returncode == 0
     assert len(result.stdout.splitlines()) == 1 and "not active" in result.stdout

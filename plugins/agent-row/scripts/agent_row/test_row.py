@@ -1,7 +1,10 @@
 """Tests for "Agent rows". Run from the repo root: uv run pytest"""
 import io
 import json
+import os
 import re
+import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -81,12 +84,42 @@ def test_model_follows_the_type_in_short():
 
 
 @pytest.mark.parametrize("model, short", [
-    pytest.param("us.anthropic.claude-opus-4-6-v1:0", "opus-4.6", id="bedrock"),
+    pytest.param("us.anthropic.claude-opus-4-6-v1", "opus-4.6", id="bedrock"),
     pytest.param("claude-sonnet-4-5-20250929", "sonnet-4.5", id="snapshot_date"),
-    pytest.param("us.anthropic.claude-sonnet-4-5-20250929-v1:0", "sonnet-4.5", id="bedrock_snapshot_date"),
+    pytest.param("us.anthropic.claude-sonnet-4-5-20250929-v1:0", "sonnet-4.5", id="bedrock_snapshot_date_and_version"),
+    pytest.param("claude-haiku-4-5@20251001", "haiku-4.5", id="vertex_at_date"),
+    pytest.param("claude-sonnet-4-5@20250929", "sonnet-4.5", id="vertex_at_date_sonnet"),
 ])
 def test_short_model(model, short):
     assert short_model(model) == short
+
+
+def test_long_name_and_model_are_cut_so_that_they_leave_the_activity_its_room():
+    row = body(columns=120, name="n" * 80, model="claude-" + "m" * 80, label="Reading src/auth/session.py")
+    assert "Reading src/auth/session.py" in row
+
+
+def test_control_characters_and_line_breaks_are_cleaned_from_name_description_and_label():
+    row = body(name="auth\x1b]8;;http://x\x07-reviewer", description="Review\nthe\tauth  module\x9b", label="Reading\r\nsrc/auth\x00.py")
+    assert "\x1b" not in row and "\x07" not in row and "\x00" not in row and "\x9b" not in row
+    assert "\n" not in row and "\t" not in row and "\r" not in row
+    assert cells(row)[2:4] == ["Review the auth module", "Reading src/auth.py"]
+
+
+def test_description_cleaned_alike_in_label_still_shows_no_summary():
+    assert cells(body(description="Review\nthe auth module", label="Review the auth module"))[3] == "no summary yet"
+
+
+def test_script_runs_as_a_program_and_the_wired_command_is_that_file():
+    script = Path(__file__).with_name("row.py")
+    command = json.loads((script.parents[2] / "settings.json").read_text())["subagentStatusLine"]["command"]
+    assert command.replace('"${CLAUDE_PLUGIN_ROOT}"', str(script.parents[2])) == str(script)
+    panel = {"columns": 120, "tasks": [agent(description="café")]}
+    # Real UTF-8 bytes with a Latin-1 stdin: reading stdin as text would turn é into Ã©.
+    result = subprocess.run([str(script)], input=json.dumps(panel, ensure_ascii=False).encode("utf-8"), capture_output=True, check=True, env={"PATH": os.environ["PATH"], "PYTHONIOENCODING": "latin-1"})
+    row = json.loads(result.stdout)
+    assert row["id"] == "a1"
+    assert cells(row["content"])[2] == "café"
 
 
 def test_description_follows_the_model():
@@ -150,6 +183,10 @@ def test_running_time_and_token_count_stand_at_the_right_edge():
     assert len(body(columns=120, tokenCount=12_345)) == 120
 
 
+def test_running_time_is_never_negative_after_the_clock_steps_back():
+    assert cells(body(startTime=NOW + 2_000))[-1] == "0s"
+
+
 def test_no_token_count_while_it_is_zero():
     assert cells(body(startTime=NOW - 5_700, tokenCount=0))[-1] == "5s"
 
@@ -157,6 +194,9 @@ def test_no_token_count_while_it_is_zero():
 @pytest.mark.parametrize("count, written", [
     pytest.param(850, "850", id="under_a_thousand"),
     pytest.param(1_234_567, "1.2m", id="millions"),
+    pytest.param(12_350, "12.4k", id="half_rounds_up"),
+    pytest.param(999_949, "999.9k", id="last_thousands"),
+    pytest.param(999_950, "1.0m", id="rounds_up_into_millions"),
 ])
 def test_token_count(count, written):
     assert token_count(count) == written
@@ -194,6 +234,16 @@ def test_each_wide_character_takes_two_of_the_panels_columns():
     description = "認証モジュールを確認"
     row = body(columns=120, description=description, label="Reading src/auth/session.py")
     assert len(row) + len(description) == 120
+
+
+@pytest.mark.parametrize("text, columns", [
+    pytest.param("สวัสดี", 4, id="thai_vowel_and_tone_marks"),
+    pytest.param("é", 1, id="combining_accent"),
+    pytest.param("a​b", 2, id="zero_width_space"),
+    pytest.param("認証abc", 7, id="wide_and_ascii"),
+])
+def test_display_width_counts_zero_for_marks_that_take_no_column(text, columns):
+    assert display_width(text) == columns
 
 
 def test_wide_characters_line_up_by_the_columns_they_take():

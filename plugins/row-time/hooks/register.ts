@@ -4,16 +4,20 @@ import type { EngineInterface, Register, RenderElement } from 'claude-code'
 const NOT_YET = '--:--'
 
 /**
- * What Claude Code draws outside the transcript, and so records no time for: the spinner, the band above the prompt,
- * the lines under it, and the status lines under the logo.
+ * The rows of the terminal transcript that Claude Code records a time for: a prompt, a notice and a reply, a tool call,
+ * a folded run of calls, and the line that closes a turn. Everything else it draws is left alone, such as what stands
+ * outside the transcript, a call's result under its call, and a slash command's output under the command's own line.
  */
-const OUTSIDE_THE_TRANSCRIPT = ['Spinner', 'AbovePrompt', 'PromptHint', 'SessionMode', 'InfoNotice']
+const TIMED = ['UserMessage', 'AssistantMessage', 'ToolUse', 'ToolGroup', 'TurnDuration']
 
 /** The text of the reply Claude Code 2.1.322 adds to a session it forks, in the model's place. */
 const ADDED_REPLY = 'No response requested.'
 
-/** How long the rows wait to be drawn again after the conversation gains a row, in milliseconds. */
-const WRITE_WAIT_MS = 100
+/**
+ * How long the rows wait to be drawn again after the conversation gains a row, in milliseconds. Claude Code 2.1.322
+ * writes what it has queued for the transcript on a 100 ms timer (`FLUSH_INTERVAL_MS`), so a wait of 100 ms races it.
+ */
+const WRITE_WAIT_MS = 300
 
 /** The time of day of a transcript timestamp, as HH:MM where the session runs. */
 function timeOfDay(timestamp: string): string {
@@ -53,19 +57,39 @@ function timesText(kept: Map<string, string>): string {
   return [...kept].map(([id, timestamp]) => `${id} ${timestamp}\n`).join('')
 }
 
-/** The times a times file's text keeps, by the id of their row. */
+/**
+ * The times a times file's text keeps, by the id of their row. What follows the last line break is a line a stopped
+ * write cut short, or nothing: its row is read from the transcript again, and the next write holds it whole.
+ */
 function keptTimes(text: string): Map<string, string> {
-  return new Map(text.split('\n').filter(Boolean).map((line) => line.split(' ') as [string, string]))
+  const wholeLines = text.slice(0, text.lastIndexOf('\n') + 1)
+  return new Map(wholeLines.split('\n').filter(Boolean).map((line) => line.split(' ') as [string, string]))
 }
 
 /**
- * The transcripts a session's rows are recorded in: the session's own, then those of its subagents, which Claude Code
- * keeps in the session's folder beside it.
+ * The transcripts a session's rows are recorded in that may hold lines not yet read: the session's own, then those of
+ * its subagents that have grown since they were last read, which Claude Code keeps in the session's folder beside it.
  */
-async function transcriptsOf($: EngineInterface, transcript: string): Promise<string[]> {
-  const subagents = transcript.replace(/\.jsonl$/, '/subagents')
-  const theirs = await $.fs.list(subagents).catch(() => [])
-  return [transcript, ...theirs.map((entry) => `${subagents}/${entry.name}`)]
+async function transcriptsOf($: EngineInterface, transcript: string, reading: Reading): Promise<string[]> {
+  return [transcript, ...(await grownIn($, transcript.replace(/\.jsonl$/, '/subagents'), reading))]
+}
+
+/**
+ * The subagents' transcripts in a folder, and in the folders within it, such as the one a workflow run keeps its
+ * agents' in, that have grown since they were last read.
+ */
+async function grownIn($: EngineInterface, folder: string, reading: Reading): Promise<string[]> {
+  const entries = await $.fs.list(folder).catch(() => [])
+  const grown = await Promise.all(
+    entries.map(async ({ name, kind, size, isLink }) => {
+      const path = `${folder}/${name}`
+      if (kind === 'dir') return grownIn($, path, reading)
+      // A listing gives a link the size 0, whatever it leads to, so a link is read on each time, and never walked into.
+      const hasGrown = isLink || size > (reading.bytesRead.get(path) ?? 0)
+      return name.startsWith('agent-') && name.endsWith('.jsonl') && hasGrown ? [path] : []
+    }),
+  )
+  return grown.flat()
 }
 
 /** What has been read of a session's transcripts so far. */
@@ -84,13 +108,15 @@ type Reading = {
  */
 async function readOn($: EngineInterface, file: string, { bytesRead, recorded }: Reading): Promise<void> {
   // Read by tail: a plugin's own file read refuses a file over 4 MiB, which a transcript passes. Claude Code hands
-  // back only the first 4 MiB of what tail writes, so the file is read a stretch at a time, each from the byte after
-  // the last. tail goes straight to a byte it is told to start at, where it would count through every line before a
-  // line. Claude Code aborts the read under way for a drawing it drops, which is a read of nothing: the lines are
-  // read when a row is next looked for.
+  // back only the first 4 MiB of what a command writes, so the file is read a stretch at a time, each from the byte
+  // after the last. tail goes straight to a byte it is told to start at, where it would count through every line
+  // before a line. head stops each stretch one byte past those 4 MiB, the byte that tells Claude Code there is more,
+  // so tail does not write out the rest of the file for every stretch. Claude Code aborts the read under way for a
+  // drawing it drops, which is a read of nothing: the lines are read when a row is next looked for.
   for (;;) {
     const read = bytesRead.get(file) ?? 0
-    const { stdout, isStdoutTruncated } = await $.process.run(['tail', '-c', `+${read + 1}`, file]).catch(() => ({ stdout: '', isStdoutTruncated: false }))
+    const stretch = ['sh', '-c', 'tail -c "+$1" "$2" | head -c 4194305', 'sh', String(read + 1), file]
+    const { stdout, isStdoutTruncated } = await $.process.run(stretch).catch(() => ({ stdout: '', isStdoutTruncated: false }))
     // What follows the last line break is a line cut short, or nothing.
     const wholeLines = stdout.slice(0, stdout.lastIndexOf('\n') + 1)
     for (const line of wholeLines.split('\n').slice(0, -1)) noteTimes(line, recorded)
@@ -104,7 +130,7 @@ async function readOn($: EngineInterface, file: string, { bytesRead, recorded }:
 
 /** Reads on in a session's transcripts, one after another, as far as the one that records a row. */
 async function lookFor($: EngineInterface, transcript: string, reading: Reading, id: string): Promise<void> {
-  for (const file of await transcriptsOf($, transcript)) {
+  for (const file of await transcriptsOf($, transcript, reading)) {
     await readOn($, file, reading)
     if (reading.recorded.has(id)) break
   }
@@ -116,15 +142,21 @@ type Kept = {
   times: Map<string, string>
   /** The last write of the times file, which the next one follows. */
   written: Promise<void>
+  /** The write that waits for the one under way and has not yet started: it writes every time kept by when it starts. */
+  waiting?: Promise<void>
 }
 
 /** Keeps a row's time, in the times file too. */
 async function keep($: EngineInterface, transcript: string, kept: Kept, id: string, timestamp: string): Promise<void> {
   kept.times.set(id, timestamp)
-  const write = () => $.fs.write(timesFile(transcript), timesText(kept.times))
+  const write = () => {
+    delete kept.waiting
+    return $.fs.write(timesFile(transcript), timesText(kept.times))
+  }
   // The file is written whole, and Claude Code carries out the writes under way at once in no set order: each write
-  // follows the last, made or refused, so the one that lands last holds every time.
-  await (kept.written = kept.written.then(write, write))
+  // follows the last, made or refused, so the one that lands last holds every time. A time kept while a write waits
+  // goes in that write, so a write per row cannot queue up and eat the hook's time.
+  await (kept.waiting ??= kept.written = kept.written.then(write, write))
 }
 
 /** The read now under way of a session's transcripts, or else one started to look for a row. */
@@ -145,21 +177,42 @@ async function recordedTimestamp($: EngineInterface, transcript: string, kept: K
   // row's drawing: a row it leaves untimed reads on itself.
   if (isAnotherRowsRead && !reading.recorded.has(id)) await readUnderWay($, transcript, reading, id)
   const timestamp = reading.recorded.get(id)
-  if (timestamp) await keep($, transcript, kept, id, timestamp)
+  // A refused write, such as on a full disk, loses the file the time, not the row: a later write holds it.
+  if (timestamp) await keep($, transcript, kept, id, timestamp).catch(() => {})
   return timestamp
 }
 
+/** The times a transcript's times file keeps: none while it has no times file. */
+async function timesKept($: EngineInterface, transcript: string): Promise<Map<string, string>> {
+  return keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
+}
+
+/** Where the session holds its transcript's path, for a later load of the mod. */
+const HELD_TRANSCRIPT = { plugin: 'row-time', key: 'transcript' } as const
+
 export const register: Register = (on) => {
-  // The session's transcript file: empty until the session starts, and for a session that keeps none.
+  // The session's transcript file: empty until the session starts, for a session that keeps none, and for one whose
+  // name lacks the .jsonl ending the times file's name is made from, which would make the transcript its times file.
   let transcript = ''
   const kept: Kept = { times: new Map(), written: Promise.resolve() }
   const reading: Reading = { bytesRead: new Map(), recorded: new Map() }
   // No .catch: Claude Code skips a hook that fails, and the session goes on as it would without the mod.
   on('classic.SessionStart', async ($, e, next) => {
-    transcript = e.transcript_path
-    kept.times = keptTimes(await $.fs.read(timesFile(transcript)).catch(() => ''))
+    transcript = e.transcript_path.endsWith('.jsonl') ? e.transcript_path : ''
+    kept.times = await timesKept($, transcript)
     // Claude Code draws a resumed session's rows before it starts the session, while the transcript is not yet
     // known: they are drawn again now that it is.
+    $.ui.invalidate('ui.render')
+    await $.state.set(HELD_TRANSCRIPT, transcript)
+    return next(e)
+  })
+  // A load of the mod that hears no classic.SessionStart, as a reload, an enable or a worker respawn is, takes up the
+  // path an earlier load held. A first enable in the middle of a session finds none, and times its rows from the next.
+  on('session.start', async ($, e, next) => {
+    const { value = '' } = await $.state.get(HELD_TRANSCRIPT)
+    if (transcript !== '' || value === '') return next(e)
+    transcript = value
+    kept.times = await timesKept($, transcript)
     $.ui.invalidate('ui.render')
     return next(e)
   })
@@ -170,15 +223,11 @@ export const register: Register = (on) => {
     return stored
   })
   on('ui.render', async ($, e, next) => {
-    if (transcript === '' || OUTSIDE_THE_TRANSCRIPT.includes(e.component)) return next(e)
+    if (transcript === '' || e.surface !== 'terminal' || !TIMED.includes(e.component)) return next(e)
     // A subagent ends with a SubagentHandback call, for which Claude Code draws no row.
     if (e.component === 'ToolUse' && e.props.tool === 'SubagentHandback') return next(e)
     // Nor does it draw one for the reply it adds to a forked session itself, which only its text tells apart.
     if (e.component === 'AssistantMessage' && e.props.text === ADDED_REPLY) return next(e)
-    // A slash command's output stands under the command's own line, which Claude Code hands no plugin to draw.
-    if (e.component === 'CommandOutput') return next(e)
-    // A result is part of its call's row: it stands under the call, which carries the time.
-    if (e.component === 'ToolResult') return next(e)
     const { Box, Text } = $.ui.resolve(e)
     // A folded run is timed by its first call.
     const id = e.component === 'ToolGroup' ? String(e.props.calls[0]?.tool_use_id) : e.requestId

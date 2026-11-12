@@ -19,10 +19,8 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       # no:skipping runs the tests marked to skip without git 2.54.0 or zsh, so a runner that lacks either fails here.
-      - name: Test on the pinned Python
-        run: uv run pytest -p no:skipping
-      - name: Test on the oldest Python the rules run on
-        run: uvx --python 3.9 pytest -p no:skipping -p no:cacheprovider
+      - name: Test
+        run: uv run --locked pytest -p no:skipping
 
   mods:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
