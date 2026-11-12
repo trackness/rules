@@ -124,16 +124,6 @@ def test_session_start_without_git_2_54_registers_nothing_and_tells_claude(tmp_p
     assert result.stdout.endswith(f" is not active: the git-rules plugin requires git 2.54.0 or later, and found {found}.\n")
 
 
-def test_session_start_on_python_before_3_15_registers_nothing_and_tells_claude(tmp_path, monkeypatch):
-    """The plugin requires Python 3.15 or later, so on an older one no rule registers its git hook, and Claude is told why."""
-    monkeypatch.setattr(sys, "version_info", (3, 14, 2, "final", 0))
-    env_file, stdout = tmp_path / "session.env", io.StringIO()
-    env_file.touch()  # Claude Code hands the hook an existing file to append to
-    register(str(env_file), stdout, "test-check", "pre-commit", ["false"], "The test check")
-    assert env_file.read_text() == ""
-    assert stdout.getvalue() == "The test check is not active: the git-rules plugin requires Python 3.15 or later, and found Python 3.14.2.\n"
-
-
 @pytest.mark.parametrize("rule", REGISTERED)
 def test_session_start_with_a_vendor_git_2_54_registers_the_rule(tmp_path, rule):
     """A vendor's git adds to its version, as Apple's does."""

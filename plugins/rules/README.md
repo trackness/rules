@@ -14,7 +14,7 @@ When a hook blocks a call, Claude Code cancels it and shows Claude the hook's me
 
 ## Requirements
 
-The plugin runs on macOS or Linux, with Claude Code 2.1.322 or later. The rules run with the `python3` on the `PATH`, which must be Python 3.15 or later, and use only its standard library. Until the workspace is trusted, Claude Code runs none of the plugin's hooks.
+The plugin runs on macOS or Linux, with Claude Code 2.1.322 or later. The rules run with the `python3` on the `PATH` and use only its standard library. Until the workspace is trusted, Claude Code runs none of the plugin's hooks.
 
 ## Install
 

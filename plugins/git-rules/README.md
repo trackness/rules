@@ -24,7 +24,7 @@ None of these git hooks checks:
 
 ## Requirements
 
-The plugin requires macOS or Linux, Claude Code 2.1.322 or later, Python 3.15 or later as the `python3` on the `PATH`, and git 2.54.0 or later, the first release with hooks defined in config, which is how the rules register their git hooks. The rules use only Python's standard library. When a session starts, each rule checks the Python and the git it finds, and with an older one registers no git hook and tells Claude that its check is not active, naming the version it found. Until the workspace is trusted, Claude Code runs none of the plugin's hooks.
+The plugin requires macOS or Linux, Claude Code 2.1.322 or later, and git 2.54.0 or later, the first release with hooks defined in config, which is how the rules register their git hooks. The rules run with the `python3` on the `PATH` and use only its standard library. When a session starts, each rule checks the git it finds, and with an older one registers no git hook and tells Claude that its check is not active, naming the version it found. Until the workspace is trusted, Claude Code runs none of the plugin's hooks.
 
 ## Install
 
