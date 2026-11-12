@@ -21,6 +21,13 @@ def test_main_blocks_write_to_existing_file(tmp_path):
     assert main(tool_call(existing), io.StringIO()) == 2
 
 
+def test_main_blocks_write_to_existing_empty_file(tmp_path):
+    """Edit with an empty old_string fills an empty file, so Write is not needed for it."""
+    existing = tmp_path / "notes.md"
+    existing.touch()
+    assert main(tool_call(existing), io.StringIO()) == 2
+
+
 def test_main_allows_write_to_new_file(tmp_path):
     assert main(tool_call(tmp_path / "notes.md"), io.StringIO()) == 0
 
