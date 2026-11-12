@@ -297,6 +297,18 @@ test('a row whose time is already in the file is drawn from it, without reading 
   expect({ shown: (await ui.find({ type: 'Text' }))?.text, ran }).toEqual({ shown: `${timeOfDay('2026-11-10T09:30:16.161Z')} `, ran: [] })
 })
 
+test('a row whose line in the file a stopped write cut short shows the time the transcript records, and the file is whole again', async ($, on) => {
+  // The write of the file stopped part of the way into the reply's line.
+  const files: Record<string, string> = { [TRANSCRIPT]: REPLY_SESSION, [TIMES]: `${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:3` }
+  host(on, files)
+  await $.classic.SessionStart({ source: 'resume', transcript_path: TRANSCRIPT })
+  const ui = await drawReplyRow($)
+  expect({ shown: (await ui.find({ type: 'Text' }))?.text, file: files[TIMES] }).toEqual({
+    shown: `${timeOfDay('2026-11-10T09:32:41.970Z')} `,
+    file: `${SKILL_CALL.tool_use_id} 2026-11-10T09:30:16.161Z\n${REPLY_ID} 2026-11-10T09:32:41.970Z\n`,
+  })
+})
+
 test('a row of a subagent shows the time the subagent\'s own transcript records for it', async ($, on) => {
   // Claude Code keeps each subagent's transcript in the session's own folder, beside the session's transcript.
   const subagent = '/home/me/.claude/projects/-srv-work/5eb6757b-439c-4746-a382-87be59dab35a/subagents/agent-aa3ba150d12cc0104.jsonl'

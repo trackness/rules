@@ -57,9 +57,13 @@ function timesText(kept: Map<string, string>): string {
   return [...kept].map(([id, timestamp]) => `${id} ${timestamp}\n`).join('')
 }
 
-/** The times a times file's text keeps, by the id of their row. */
+/**
+ * The times a times file's text keeps, by the id of their row. What follows the last line break is a line a stopped
+ * write cut short, or nothing: its row is read from the transcript again, and the next write holds it whole.
+ */
 function keptTimes(text: string): Map<string, string> {
-  return new Map(text.split('\n').filter(Boolean).map((line) => line.split(' ') as [string, string]))
+  const wholeLines = text.slice(0, text.lastIndexOf('\n') + 1)
+  return new Map(wholeLines.split('\n').filter(Boolean).map((line) => line.split(' ') as [string, string]))
 }
 
 /**
