@@ -55,8 +55,15 @@ def token_count(count):
 
 
 def display_width(text):
-    """The columns a terminal draws the text across: two for each East Asian wide or fullwidth character, one for any other."""
-    return sum(2 if unicodedata.east_asian_width(character) in ("W", "F") else 1 for character in text)
+    """The columns a terminal draws the text across: none for a combining or format character, two for each East Asian wide or fullwidth one, one for any other."""
+    return sum(column(character) for character in text)
+
+
+def column(character):
+    """The columns one character takes; U+FE0F, the emoji variation selector, keeps one."""
+    if character != "️" and unicodedata.category(character) in ("Mn", "Me", "Cf"):
+        return 0
+    return 2 if unicodedata.east_asian_width(character) in ("W", "F") else 1
 
 
 def pad(text, width):

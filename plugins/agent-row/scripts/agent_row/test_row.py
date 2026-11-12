@@ -236,6 +236,16 @@ def test_each_wide_character_takes_two_of_the_panels_columns():
     assert len(row) + len(description) == 120
 
 
+@pytest.mark.parametrize("text, columns", [
+    pytest.param("สวัสดี", 4, id="thai_vowel_and_tone_marks"),
+    pytest.param("é", 1, id="combining_accent"),
+    pytest.param("a​b", 2, id="zero_width_space"),
+    pytest.param("認証abc", 7, id="wide_and_ascii"),
+])
+def test_display_width_counts_zero_for_marks_that_take_no_column(text, columns):
+    assert display_width(text) == columns
+
+
 def test_wide_characters_line_up_by_the_columns_they_take():
     rows = drawn([
         agent(id="a1", description="認証モジュールを確認", label="Reading src/auth/session.py"),
