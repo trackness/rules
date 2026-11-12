@@ -143,6 +143,24 @@ def test_registration_cut_short_leaves_git_working(tmp_path):
 
 
 @needs_config_hooks
+def test_a_later_session_start_replaces_the_registration_in_the_same_env_file(tmp_path):
+    """Claude Code hands a hook the same env file at every session start, such as a resume or a compaction, and a plugin update moves the script between two."""
+    env_file = tmp_path / "session.env"
+    env_file.write_text("export KEPT=yes\n")
+    register(str(env_file), io.StringIO(), "test-check", "pre-commit", ["old path/rule.py"], "The test check")
+    register(str(env_file), io.StringIO(), "other-check", "pre-push", ["other"], "The other check")
+    register(str(env_file), io.StringIO(), "test-check", "pre-commit", ["new path/rule.py"], "The test check")
+    listed = run_with_env_files([env_file], "git", "config", "--list", "--show-scope")
+    assert [line for line in listed.stdout.splitlines() if line.startswith("command\t")] == [
+        "command\thook.other-check.command=other",
+        "command\thook.other-check.event=pre-push",
+        "command\thook.test-check.command='new path/rule.py'",
+        "command\thook.test-check.event=pre-commit",
+    ]
+    assert env_file.read_text().startswith("export KEPT=yes\n")
+
+
+@needs_config_hooks
 def test_registered_command_runs_as_git_hook_for_its_event(tmp_path):
     """The test hook rejects every commit, so each way that commits despite it, below, gets past every git rule."""
     repo = new_repo(tmp_path)

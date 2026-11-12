@@ -33,10 +33,16 @@ def register(env_file, stdout, name, event, command, check):
     command = shlex.join(str(word) for word in command)  # git runs the command through a shell
     # Each entry goes after those already counted, so other rules' and the user's GIT_CONFIG_* entries stay. The command comes first:
     # git ignores a command with no event, but aborts on an event with no command, as a shell that stops partway through would leave.
-    with open(env_file, "a") as session_env:
-        session_env.write(
-            f"export GIT_CONFIG_KEY_${{GIT_CONFIG_COUNT:-0}}=hook.{name}.command GIT_CONFIG_VALUE_${{GIT_CONFIG_COUNT:-0}}={shlex.quote(command)}\n"
-            "export GIT_CONFIG_COUNT=$((${GIT_CONFIG_COUNT:-0} + 1))\n"
-            f"export GIT_CONFIG_KEY_${{GIT_CONFIG_COUNT}}=hook.{name}.event GIT_CONFIG_VALUE_${{GIT_CONFIG_COUNT}}={event}\n"
-            "export GIT_CONFIG_COUNT=$((GIT_CONFIG_COUNT + 1))\n"
-        )
+    command_entry = f"export GIT_CONFIG_KEY_${{GIT_CONFIG_COUNT:-0}}=hook.{name}.command GIT_CONFIG_VALUE_${{GIT_CONFIG_COUNT:-0}}="
+    rest = (
+        "export GIT_CONFIG_COUNT=$((${GIT_CONFIG_COUNT:-0} + 1))\n"
+        f"export GIT_CONFIG_KEY_${{GIT_CONFIG_COUNT}}=hook.{name}.event GIT_CONFIG_VALUE_${{GIT_CONFIG_COUNT}}={event}\n"
+        "export GIT_CONFIG_COUNT=$((GIT_CONFIG_COUNT + 1))\n"
+    )
+    # Claude Code hands a hook the same file at every session start, such as a resume or a compaction, so this replaces what an earlier one registered.
+    earlier = re.compile(re.escape(command_entry) + r".*\n" + re.escape(rest))
+    with open(env_file, "a+") as session_env:  # a+ makes the file if there is none, and writes at its end
+        session_env.seek(0)
+        kept = earlier.sub("", session_env.read())
+        session_env.truncate(0)
+        session_env.write(f"{kept}{command_entry}{shlex.quote(command)}\n{rest}")
