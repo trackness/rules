@@ -72,7 +72,8 @@ def new_branch_names(cmd):
         commands = simple_commands(cmd)
     except ValueError:  # an unbalanced quote, such as an apostrophe in a heredoc body, leaves no words to read
         return []
-    return [name for words in commands for name in command_branch_names(words)]
+    # The shell expands $ and backticks after this check reads the command, so a name holding one is left to the pre-push check.
+    return [name for words in commands for name in command_branch_names(words) if "$" not in name and "`" not in name]
 
 
 def command_branch_names(words):

@@ -144,6 +144,9 @@ def test_conventional(name):
     pytest.param("xargs git checkout -b Add_Login", [], id="unread_xargs"),
     pytest.param("git commit -m '#12 fix' && git checkout -b Add_Login", [], id="unread_after_a_quoted_word_starting_with_hash"),
     pytest.param("if true; then git checkout -b Add_Login; fi", [], id="unread_after_a_shell_keyword"),
+    pytest.param('git checkout -b "feature/$TICKET"', [], id="unread_name_holding_a_variable"),
+    pytest.param("git switch -c $(cat name.txt)", [], id="unread_name_from_a_command_substitution"),
+    pytest.param("git branch feature/`date +%s`", [], id="unread_name_holding_a_backtick"),
 ])
 def test_new_branch_names(cmd, names):
     assert new_branch_names(cmd) == names

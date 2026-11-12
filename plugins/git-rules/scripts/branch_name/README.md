@@ -35,6 +35,7 @@ The check reads only the commands listed under Checked, so a branch made any oth
 - `git worktree add <path>` without `-b`, which names the branch after the path
 - `git stash branch`, `git update-ref` and `git fetch <remote> <src>:<dst>`
 - a value joined to its option, such as `--create=<name>`, `-b<name>` or `--branch=<name>`
+- a name holding `$` or a backtick, such as `feature/$TICKET` or `$(cat name.txt)`, which the shell expands only after the check reads the command
 - a git option other than `-C` and `-c` with its value as the next word, such as `--git-dir <path>`
 - a git alias, such as `git co -b <name>`, and the gh alias `gh pr co`
 - git or gh after options to `sudo` or `env`, such as `sudo -u root git`, after a shell keyword, such as `then` or `do`, or run by another command, such as `bash -c` or `xargs`
