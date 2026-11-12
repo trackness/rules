@@ -89,7 +89,7 @@ def fixed_cells(task):
 def time_and_tokens(task, now):
     """The right of the agent's row: its running time, or its status once it has stopped, then its tokens, such as 1m 5s · ↓ 12.3k tokens."""
     # Claude Code sends no end time, so the time since a stopped agent's start would go on counting past its end.
-    written = running_time(now - task["startTime"]) if task["status"] == "running" else task["status"]
+    written = running_time(max(0, now - task["startTime"])) if task["status"] == "running" else task["status"]
     if task["tokenCount"]:
         # Always ↓: Claude Code's own row shows ↑ until the agent has had some activity, which it does not send.
         written += f" · ↓ {token_count(task['tokenCount'])} tokens"

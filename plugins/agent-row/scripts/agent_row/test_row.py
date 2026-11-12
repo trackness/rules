@@ -183,6 +183,10 @@ def test_running_time_and_token_count_stand_at_the_right_edge():
     assert len(body(columns=120, tokenCount=12_345)) == 120
 
 
+def test_running_time_is_never_negative_after_the_clock_steps_back():
+    assert cells(body(startTime=NOW + 2_000))[-1] == "0s"
+
+
 def test_no_token_count_while_it_is_zero():
     assert cells(body(startTime=NOW - 5_700, tokenCount=0))[-1] == "5s"
 
