@@ -197,11 +197,8 @@ def test_the_script_run_as_a_hook_blocks_a_notebook_edit_in_a_repository_on_main
     assert result.returncode == 2
 
 
-def test_the_script_run_as_a_hook_reads_a_path_holding_a_non_ascii_character_whatever_the_locale(tmp_path):
-    """Claude Code writes the tool call in UTF-8, where Python before 3.15 reads stdin in the locale's encoding, such as Latin-1.
-
-    PYTHONIOENCODING stands for such a locale here, on every Python.
-    """
+def test_the_script_run_as_a_hook_reads_a_path_holding_a_non_ascii_character_whatever_pythonioencoding_says(tmp_path):
+    """Claude Code writes the tool call in UTF-8, where Python reads stdin in the encoding PYTHONIOENCODING names, such as Latin-1."""
     (tmp_path / "café").mkdir()
     repo = repo_on(tmp_path / "café", "main")
     env = {**GIT_ENV, "PYTHONIOENCODING": "latin-1"}
@@ -263,7 +260,7 @@ def test_registered_hook_runs_from_a_path_with_spaces_and_quotes(tmp_path):
 
 
 def test_session_start_without_an_env_file_tells_claude_the_commit_check_is_not_active():
-    """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook.
+    """A SessionStart hook run without a CLAUDE_ENV_FILE has nowhere to register the git hook.
 
     Claude Code adds a SessionStart hook's stdout at exit 0 to Claude's context; Claude never sees its stderr.
     """

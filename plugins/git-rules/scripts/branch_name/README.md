@@ -66,4 +66,4 @@ The hook checks the name the branch would have on the remote, not the command, s
 
 - a local branch made in a way the Bash check does not read, until a push creates it on the remote, and never if it is never pushed
 - `git push --no-verify`, which skips the `pre-push` hook, and `git send-pack`, which runs no `pre-push` hook
-- what none of the plugin's [git hooks](../../README.md#git-hooks) checks, such as a push run with `-c hook.conventional-branch.enabled=false` or git run by a PowerShell command
+- what none of the plugin's [git hooks](../../README.md#git-hooks) checks, such as a push run with `-c hook.conventional-branch.enabled=false`

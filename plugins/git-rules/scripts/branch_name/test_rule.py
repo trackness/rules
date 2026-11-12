@@ -176,8 +176,8 @@ def test_main_block_gives_a_reason():
     assert stderr.getvalue() == f"Blocked: branch name Add_Login does not follow Conventional Branch 1.0.0. {NAMING}\n"
 
 
-def test_script_reads_its_input_as_utf_8_whatever_the_locale():
-    """Claude Code sends UTF-8, which Python 3.9 to 3.14 would decode with the locale's encoding, here ASCII, and fail with exit 1, which blocks nothing."""
+def test_script_reads_its_input_as_utf_8_whatever_pythonioencoding_says():
+    """Claude Code sends UTF-8, which Python would decode with the encoding PYTHONIOENCODING names, here ASCII, and fail with exit 1, which blocks nothing."""
     hook_input = json.dumps({"hook_event_name": "PreToolUse", "tool_name": "Bash", "tool_input": {"command": "git checkout -b Café"}}, ensure_ascii=False)
     result = subprocess.run([SCRIPT], input=hook_input.encode(), env={**GIT_ENV, "PYTHONIOENCODING": "ascii"}, capture_output=True)
     assert result.returncode == 2, result.stderr
@@ -341,7 +341,7 @@ def test_pre_push_reads_a_local_ref_typed_with_spaces(tmp_path):
 
 
 def test_session_start_without_env_file_tells_claude_the_push_check_is_inactive():
-    """Claude Code gives no CLAUDE_ENV_FILE to a SessionStart hook run in PowerShell, so there is nowhere to register the hook.
+    """A SessionStart hook run without a CLAUDE_ENV_FILE has nowhere to register the git hook.
 
     Claude Code adds a SessionStart hook's stdout at exit 0 to Claude's context; Claude never sees its stderr.
     """

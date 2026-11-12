@@ -41,4 +41,4 @@ This check is what stops the work a Bash command does. Nothing in a command's te
 - `git commit --no-verify`, which skips the `pre-commit` hook
 - commits that other git commands make on main, master or develop, such as `git cherry-pick`, `git revert` and `git merge`, whether it fast-forwards or makes a merge commit: none runs a `pre-commit` hook unless they stop at a conflict, and then the hook lets through the commit that finishes them; a fast-forward is how `git pull` brings main up to date
 - a repository whose shared branch has another name, such as trunk: only main, master and develop are kept free of work
-- what none of the plugin's [git hooks](../../README.md#git-hooks) checks, such as a commit run with `-c hook.work-branch.enabled=false` or git run by a PowerShell command
+- what none of the plugin's [git hooks](../../README.md#git-hooks) checks, such as a commit run with `-c hook.work-branch.enabled=false`
