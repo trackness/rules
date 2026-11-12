@@ -69,7 +69,9 @@ def main(stdin, stderr):
         text, start, end = tool_input["content"], 0, len(tool_input["content"])
     else:
         path = Path(tool_input["file_path"])
-        before = path.read_text(encoding="utf-8") if path.exists() else ""  # Edit with an empty old_string creates the file
+        data = path.read_bytes() if path.exists() else b""  # Edit with an empty old_string creates the file
+        # as Edit reads a file: UTF-16 after the little-endian byte order mark, otherwise UTF-8 with what does not decode replaced
+        before = data.decode("utf-16-le" if data.startswith(b"\xff\xfe") else "utf-8", errors="replace")
         old, new = tool_input["old_string"], tool_input["new_string"]
         if old not in before:  # Edit then matches through curly quotes and \uXXXX escapes, so compare the way it does
             before, old, new = loose(before), loose(old), loose(new)

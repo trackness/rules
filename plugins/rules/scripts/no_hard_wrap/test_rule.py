@@ -169,6 +169,17 @@ def test_main_blocks_edit_that_deletes_a_line_between_two_paragraph_lines(tmp_pa
     assert main(edit_call(readme, "<!-- a note between the paragraphs -->", ""), io.StringIO()) == 2
 
 
+@pytest.mark.parametrize("data", [
+    pytest.param("﻿This paragraph is on one line.\n".encode("utf-16-le"), id="utf_16_after_its_byte_order_mark"),
+    pytest.param("The café paragraph is on one line.\n".encode("latin-1"), id="bytes_that_are_not_utf_8"),
+])
+def test_main_blocks_edit_that_wraps_a_file_that_is_not_utf_8(tmp_path, data):
+    """Edit reads a file that starts with the UTF-16 little-endian byte order mark as UTF-16, and any other as UTF-8 with what does not decode replaced."""
+    readme = tmp_path / "README.md"
+    readme.write_bytes(data)
+    assert main(edit_call(readme, "on one line.", "on one line, until\nthis edit wraps it."), io.StringIO()) == 2
+
+
 def test_main_blocks_edit_that_creates_a_wrapped_file(tmp_path):
     assert main(edit_call(tmp_path / "NOTES.md", "", WRAPPED), io.StringIO()) == 2
 
