@@ -38,6 +38,15 @@ def off_a_work_branch(directory):
     return None if any(Path(path).is_file() for path in stopped) else f"on {branch}"
 
 
+def rebased_branch(directory):
+    """The branch git is rebasing in the repository holding directory, such as main, or None when no rebase is in progress."""
+    # git keeps the rebased branch's ref, such as refs/heads/main, or detached HEAD, in one of these files while it rebases.
+    head_names = git(
+        directory, "rev-parse", "--path-format=absolute", "--git-path", "rebase-merge/head-name", "--git-path", "rebase-apply/head-name"
+    ).stdout.splitlines()
+    return next((Path(path).read_text().strip().removeprefix("refs/heads/") for path in head_names if Path(path).is_file()), None)
+
+
 def register(env_file, stdout):
     """Make git run this script as the pre-commit hook in the Bash commands of the Claude Code session that owns env_file."""
     git_hook.register(
@@ -47,12 +56,17 @@ def register(env_file, stdout):
 
 def pre_commit(stderr):
     """Return git's exit code for the commit it is about to make: 1 rejects the commit, with a reason on stderr."""
-    where = off_a_work_branch(".")  # git runs a pre-commit hook at the top of the working tree
+    rebased = rebased_branch(".")  # git runs a pre-commit hook at the top of the working tree
+    if rebased and rebased.lower() in SHARED_BRANCHES:
+        # A commit made during a rebase lands on the branch rebased. git switch -c refuses to run then, and git rebase --continue runs no pre-commit hook.
+        where, create = f"rebasing {rebased}", "Finish the rebase with git rebase --continue, then create"
+    else:
+        where, create = off_a_work_branch("."), "Create"
     if not where:
         return 0
     print(
         f"Rejected: work happens only on a branch, and this repository is {where}, so nothing was committed. "
-        "Create a branch with git switch -c <type>/<description>, which keeps the changes, and commit there.",
+        f"{create} a branch with git switch -c <type>/<description>, which keeps the changes, and commit there.",
         file=stderr,
     )
     return 1

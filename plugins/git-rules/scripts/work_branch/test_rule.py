@@ -46,6 +46,18 @@ def branches_that_conflict(tmp_path):
     return repo
 
 
+def rebase_with_its_conflict_resolved(tmp_path, branch, *options):
+    """A new repo where git rebases branch onto the other of main and feature/add-login, stopped at the conflict in notes.txt, now resolved and staged."""
+    repo = branches_that_conflict(tmp_path)
+    git("-C", repo, "switch", "-q", branch)
+    onto = "feature/add-login" if branch == "main" else "main"
+    stopped = subprocess.run(["git", "-C", repo, "rebase", "-q", *options, onto], env=GIT_ENV, capture_output=True)
+    assert stopped.returncode != 0 and git("-C", repo, "branch", "--show-current") == ""
+    (repo / "notes.txt").write_text("login\nlogout\n")
+    git("-C", repo, "add", "notes.txt")
+    return repo
+
+
 def git_in_session(tmp_path, repo, *args, script=SCRIPT):
     """Start a session, then run git in repo with the given arguments as Claude's Bash tool would, with the env file sourced."""
     return run_in_session(tmp_path, script, "git", "-C", repo, *args)
@@ -100,9 +112,10 @@ def test_a_repository_with_no_commits_is_not_off_a_work_branch(tmp_path):
     assert off_a_work_branch(tmp_path / "repo") is None
 
 
-def test_a_repository_git_is_rebasing_is_not_off_a_work_branch(tmp_path):
+@pytest.mark.parametrize("branch", ["feature/add-login", "main"])
+def test_a_repository_git_is_rebasing_is_not_off_a_work_branch(tmp_path, branch):
     """git detaches HEAD while it rebases a branch, and resolving a conflict then means changing files."""
-    repo = repo_on(tmp_path, "feature/add-login")
+    repo = repo_on(tmp_path, branch)
     stop_in_a_rebase(repo)
     assert off_a_work_branch(repo) is None
 
@@ -252,6 +265,34 @@ def test_registered_hook_accepts_the_commit_that_finishes_a_merge_stopped_at_a_c
     git("-C", repo, "add", "notes.txt")
     result = git_in_session(tmp_path, repo, "commit", "-q", "--no-edit")
     assert result.returncode == 0 and commits(repo) == 4
+
+
+@needs_config_hooks
+@pytest.mark.parametrize("options", [pytest.param([], id="merge"), pytest.param(["--apply"], id="apply")])
+def test_registered_hook_rejects_a_commit_while_git_rebases_main(tmp_path, options):
+    """A commit made during a rebase lands on the branch rebased, here main."""
+    repo = rebase_with_its_conflict_resolved(tmp_path, "main", *options)
+    result = git_in_session(tmp_path, repo, "commit", "-q", "-m", "feat: more")
+    assert result.returncode != 0 and result.stderr == (
+        "Rejected: work happens only on a branch, and this repository is rebasing main, so nothing was committed. "
+        "Finish the rebase with git rebase --continue, then create a branch with git switch -c <type>/<description>, which keeps the changes, and commit there.\n"
+    )
+
+
+@needs_config_hooks
+@pytest.mark.parametrize("options", [pytest.param([], id="merge"), pytest.param(["--apply"], id="apply")])
+def test_registered_hook_lets_git_rebase_continue_finish_a_rebase_of_main(tmp_path, options):
+    """git rebase --continue, which the rejection above asks for, commits without running the pre-commit hook."""
+    repo = rebase_with_its_conflict_resolved(tmp_path, "main", *options)
+    result = run_in_session(tmp_path, SCRIPT, "env", "GIT_EDITOR=true", "git", "-C", repo, "rebase", "--continue")
+    assert result.returncode == 0, result.stderr
+    assert git("-C", repo, "branch", "--show-current") == "main\n"
+
+
+@needs_config_hooks
+def test_registered_hook_accepts_a_commit_while_git_rebases_a_work_branch(tmp_path):
+    repo = rebase_with_its_conflict_resolved(tmp_path, "feature/add-login")
+    assert git_in_session(tmp_path, repo, "commit", "-q", "-m", "feat: more").returncode == 0
 
 
 @needs_config_hooks
