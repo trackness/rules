@@ -1,7 +1,7 @@
 {
   "name": "rules",
   "owner": { "name": "trackness" },
-  "description": "Plugins that enforce rules on how Claude uses its tools, one that shows each transcript row's time, one that shows each background agent's model and description in its row, and one of skills that audit a codebase and fix what the code audit finds.",
+  "description": "Plugins that enforce rules on how Claude uses its tools, one that shows each transcript row's time, one that shows each background agent's model and description in its row, and one of skills that audit a codebase.",
   "plugins": [
     { "name": "rules", "source": "./plugins/rules" },
     { "name": "git-rules", "source": "./plugins/git-rules" },

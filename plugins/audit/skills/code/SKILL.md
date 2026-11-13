@@ -1,6 +1,6 @@
 ---
 name: code
-description: Exhaustive read-only code audit for bugs, security, tests, performance, and unnecessary code. Reads every line in scope, independently verifies findings, and checks for omissions. Leaves every finding in an untracked AUDIT-FINDINGS.md at the repo root, which /audit:code-fix starts from. Use when explicitly asked for exhaustive coverage, rather than an architecture-focused review.
+description: Exhaustive read-only code audit for bugs, security, tests, performance, and unnecessary code. Reads every line in scope, independently verifies findings, and checks for omissions. Use when explicitly asked for exhaustive coverage, rather than an architecture-focused review.
 disable-model-invocation: true
 ---
 
@@ -32,5 +32,3 @@ Name a model on every spawn, chosen by how hard its task is: verifiers and the g
 After each launch and each report, give me a short status with a table of every agent's state: ✅ done, 🚧 running, 📬 finished but report pending, 🔁 sent back, ⚠️ problem. Say plainly what went wrong, what you decided for me and why, what was left out, and the risk to know.
 
 Not checked must list every line range nobody read.
-
-Write `AUDIT-FINDINGS.md` at the repo root, untracked, never committed: the audit's only file, the handoff to `/audit:code-fix`, so it stands alone. It holds a legend, the findings table, then fix notes with exact patterns. It is no record: no log, no dates; what lives elsewhere may be removed. Table columns: #, ID (auditor's), Sev, State, Grp, Where, Problem and Fix in short, one row per finding, dropped and not-counted too. Severity: 🔴 must fix, 🟠 should fix, 🟡 nice to have. State: 🛠️ assigned, ⏸️ parked, ❌ dropped (refuted), ➖ not counted, ✅ fixed. No cell holds a `|`: a pattern with one goes in the fix notes, in a `~~~` fence.
