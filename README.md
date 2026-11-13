@@ -9,7 +9,7 @@ This repo is the Claude Code plugin marketplace `rules`, holding six plugins, ea
 | [`subagent-model`](plugins/subagent-model/README.md) | A mod: the explicit subagent model rule |
 | [`row-time`](plugins/row-time/README.md) | A mod: row times |
 | [`agent-row`](plugins/agent-row/README.md) | A Python `subagentStatusLine`: each background agent's model and description in its row |
-| [`audit`](plugins/audit/README.md) | Three skills, each run by subagents: an exhaustive code audit, a fix run for its findings, and an architecture review |
+| [`audit`](plugins/audit/README.md) | Two skills, each run by subagents: an exhaustive code audit and an architecture review |
 
 Each `claude plugin install` copies only that plugin's folder, such as `plugins/rules/`, into Claude Code's plugin cache. The marketplace manifest, `.claude-plugin/marketplace.json`, sits at the repo root with each plugin's source set to its folder, such as `./plugins/rules`, and so does the tooling that runs the Python tests: `pyproject.toml`, `uv.lock` and `.python-version`. `claude plugin marketplace add` clones the whole repo, so these root files reach the marketplace's copy but not an installed plugin.
 
