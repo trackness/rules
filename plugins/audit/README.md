@@ -1,6 +1,6 @@
 # Audit
 
-Skills that audit a codebase with subagents. Each skill is a folder in `skills/` holding its `SKILL.md`.
+Skills that audit a codebase with subagents.
 
 | Skill | What it does |
 |---|---|
